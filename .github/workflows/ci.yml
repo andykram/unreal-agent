@@ -4,10 +4,13 @@ on:
   push:
     branches: [main]
   pull_request:
-    branches: [main]
   workflow_dispatch:
 
 permissions: {}
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   go:
@@ -28,6 +31,17 @@ jobs:
           go-version-file: go.mod
           cache: false
       - run: make test check build
+      - name: Build without cgo
+        run: CGO_ENABLED=0 go build ./...
+      - name: Check standalone workflow module
+        if: hashFiles('cmd/workflow-prototype/go.mod') != ''
+        working-directory: cmd/workflow-prototype
+        env:
+          CGO_ENABLED: '0'
+        run: |
+          go vet ./...
+          go test ./...
+          go build ./...
 
   fuzz:
     name: Fuzzing (${{ matrix.target }})
@@ -47,6 +61,8 @@ jobs:
             package: ./harness/coordinator
           - target: FuzzPrepareViewImage
             package: ./harness/operation
+          - target: FuzzSSEDataRoundTrip
+            package: ./harness/primitives
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -89,3 +105,74 @@ jobs:
       - run: make -C benchmarks/harbor smoke BUNDLE=../../bin/harbor/ci
       - run: docker build -t unreal-agent-ci .
       - run: docker run --rm unreal-agent-ci -h
+
+  lint:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: Install pinned linters
+        run: |
+          go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0
+          go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+      - name: Lint Go and Actions
+        run: |
+          golangci-lint run ./...
+          actionlint
+      - name: Lint standalone workflow module
+        if: hashFiles('cmd/workflow-prototype/go.mod') != ''
+        working-directory: cmd/workflow-prototype
+        env:
+          CGO_ENABLED: '0'
+        run: golangci-lint run ./...
+
+  workflow:
+    name: Workflow authoring and docs (when present)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        if: hashFiles('cmd/workflow-prototype/go.mod') != ''
+        with:
+          go-version-file: go.mod
+          cache: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        if: hashFiles('harness/workflow/test_system_prompt.py') != ''
+        with:
+          python-version: '3.12'
+      - name: Install native authoring test dependencies
+        if: hashFiles('harness/workflow/test_system_prompt.py') != ''
+        run: python -m pip install pydantic==1.10.26 typing_extensions==4.16.0 ruff==0.15.6
+      - name: Check Python authoring and skill generation
+        if: hashFiles('harness/workflow/test_system_prompt.py') != ''
+        run: |
+          ruff check --select E9,F63,F7,F82 harness/workflow cmd/workflow-prototype
+          python -m unittest discover -s harness/workflow -p 'test_*.py' -v
+          python cmd/workflow-prototype/typing/generate_stubs.py cmd/workflow-prototype/typing/catalog.example.json --output "$RUNNER_TEMP/harness.pyi"
+          python cmd/workflow-prototype/typing/generate_skills.py cmd/workflow-prototype/typing/fixtures/*/SKILL.md --output-dir "$RUNNER_TEMP/skill-types"
+      - name: Compile a complex workflow with WASI Python and Pydantic
+        if: hashFiles('cmd/workflow-prototype/go.mod') != ''
+        run: ./cmd/workflow-prototype/run.sh -script examples/agent_pipeline.py -json > "$RUNNER_TEMP/workflow-graph.json"
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        if: hashFiles('cmd/workflow-prototype/docs/package-lock.json') != ''
+        with:
+          node-version: '24'
+      - name: Build developer docs
+        if: hashFiles('cmd/workflow-prototype/docs/package-lock.json') != ''
+        working-directory: cmd/workflow-prototype/docs
+        run: |
+          npm ci
+          npm run build
