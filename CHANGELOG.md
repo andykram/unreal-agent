@@ -14,3 +14,7 @@ Each pull request adds its entry here. PR links provide stable history across re
 ### Session fork recovery ([#2](https://github.com/andykram/unreal-agent/pull/2))
 
 - Preserve completed tool results when forking and restoring sessions, so resumed model requests retain matching tool calls and outputs.
+
+### Skill loading ([#3](https://github.com/andykram/unreal-agent/pull/3))
+
+- Align skill discovery instructions with loading skills by name, letting the harness resolve their locations.
