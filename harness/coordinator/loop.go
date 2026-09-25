@@ -565,7 +565,7 @@ func (current *coordinator) addItemToLocalState(
 			return cmp.Compare(a.callID, b.callID)
 		})
 		for _, key := range keys {
-			current.dependencies.ContextBuilder.AddToolResult(key.callID, []llm.ToolResultOutput{{Kind: llm.ToolResultText, Value: "This parent-session tool call was unfinished at the fork and will not continue in this session. Its result is unavailable; do not assume it succeeded."}}, false)
+			current.dependencies.ContextBuilder.AddToolResult(key.callID, []llm.ToolResultOutput{{Kind: llm.ToolResultText, Value: "This parent-session tool call's result is unavailable in this fork. Its operations will not continue here; do not assume it succeeded."}}, false)
 		}
 		current.dependencies.ContextBuilder.Commit()
 		current.state.deliveredInputs = current.state.availableInputs
