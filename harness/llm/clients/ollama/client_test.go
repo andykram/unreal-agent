@@ -39,3 +39,23 @@ func TestClientUsesResponsesWithoutAuthentication(t *testing.T) {
 		t.Fatalf("response = %#v, error = %v", response, err)
 	}
 }
+
+func TestCloudClientAuthenticatesResponses(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/responses" || r.Header.Get("Authorization") != "Bearer cloud-key" {
+			t.Errorf("request = %s, auth = %q", r.URL.Path, r.Header.Get("Authorization"))
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = io.WriteString(w, "data: {\"type\":\"response.completed\",\"response\":{\"id\":\"r\",\"status\":\"completed\",\"output\":[]}}\n\n")
+	}))
+	defer server.Close()
+	client, err := NewClient(Config{BaseURL: server.URL + "/v1", APIKey: "cloud-key"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer client.Close()
+	response, err := client.Respond(t.Context(), llm.Request{Model: llm.Model{ID: "cloud-model"}}, llm.RequestOptions{})
+	if err != nil || response.ID != "r" {
+		t.Fatalf("response = %+v, error = %v", response, err)
+	}
+}

@@ -42,6 +42,21 @@ OpenAI is the default provider. Set `UNREAL_HARNESS_LLM_PROVIDER` to `openai`,
 `openai-codex`, `openrouter`, `fireworks`, or `ollama`, and
 `UNREAL_HARNESS_LLM_MODEL` to choose a model.
 
+To use a Codex subscription, sign in with the Codex CLI, then select its
+provider. The runner reads the existing ChatGPT login from
+`${CODEX_HOME:-$HOME/.codex}/auth.json` and defaults to `gpt-6-sol`:
+
+```sh
+codex login
+UNREAL_HARNESS_LLM_PROVIDER=openai-codex \
+  unreal-agent-runner -p 'Summarize this project.'
+```
+
+You can set `OPENAI_CODEX_AUTH_FILE` to another Codex auth file, or supply both
+`OPENAI_CODEX_ACCESS_TOKEN` and `OPENAI_CODEX_ACCOUNT_ID`. The runner reads the
+credentials when it starts; after a token expires, sign in again and restart it.
+This provider uses the Codex subscription, not `OPENAI_API_KEY`.
+
 Run `unreal-agent-runner -h` for options and the JSON request fields.
 
 ## Docker
