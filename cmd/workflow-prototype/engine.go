@@ -17,7 +17,6 @@ var (
 	finishCheck         = workflow.FinishCheck
 	submitOutput        = workflow.SubmitOutput
 	assignExecutionKeys = workflow.AssignExecutionKeys
-	executorKey         = workflow.ExecutorKey
 	openRunStore        = workflow.OpenStore
 	ErrStaleRunRevision = workflow.ErrStaleRunRevision
 )
