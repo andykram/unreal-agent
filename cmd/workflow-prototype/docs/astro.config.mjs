@@ -1,7 +1,14 @@
 import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
+import { satteri } from '@astrojs/markdown-satteri';
+import baseLinks from './src/base-links.mjs';
+
+const base = process.env.ASTRO_BASE || '/';
 
 export default defineConfig({
+  site: process.env.ASTRO_SITE || undefined,
+  base,
+  markdown: { processor: satteri({ mdastPlugins: [baseLinks(base)] }) },
   integrations: [starlight({
     title: 'Workflow Python API',
     description: 'Author workflow graphs with Python and explore their simulated execution in Go.',
