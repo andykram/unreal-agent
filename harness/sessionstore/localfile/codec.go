@@ -60,6 +60,12 @@ func encodeInitialLog(value session.Session, items []sessionstore.Item) ([]byte,
 		return nil, fmt.Errorf("encode session: %w", err)
 	}
 
+	lastFork := -1
+	for index, item := range items {
+		if item.Kind == sessionstore.ItemFork {
+			lastFork = index
+		}
+	}
 	for index, item := range items {
 		if item.Sequence != sessionstore.Sequence(index+1) {
 			return nil, fmt.Errorf("item %d has non-contiguous sequence %d", index, item.Sequence)
@@ -69,7 +75,7 @@ func encodeInitialLog(value session.Session, items []sessionstore.Item) ([]byte,
 		}
 
 		record := itemRecord{Item: item}
-		if item.Kind == sessionstore.ItemToolCallStatus {
+		if item.Kind == sessionstore.ItemToolCallStatus && index > lastFork {
 			status := item.Data.(sessionstore.ToolCallStatus)
 			record.Operations = status.Operations
 			status.Operations = nil

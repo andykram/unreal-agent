@@ -86,10 +86,17 @@ func TestCoordinatorForkStopsWhenChildIsIdle(t *testing.T) {
 						t.Fatal("child turn did not establish its own type")
 					}
 					inheritedCall := false
+					inheritedResult := false
 					for _, item := range child.calls[0].request.Input {
+						if item.Type == llm.ItemToolResult && item.Data.(llm.ToolResult).CallID == "call-0" {
+							inheritedResult = true
+						}
 						if item.Type == llm.ItemToolCall && item.Data.(llm.ToolCall).CallID == "call-0" {
 							inheritedCall = true
 						}
+					}
+					if !inheritedResult {
+						t.Fatal("fork request contains inherited call without a matching result")
 					}
 					if !inheritedCall {
 						t.Fatal("fork lost its parent context")

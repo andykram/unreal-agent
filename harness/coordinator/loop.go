@@ -347,6 +347,9 @@ func (current *coordinator) requestModelResponse(
 	ctx context.Context,
 	results chan<- modelResponseResult,
 ) error {
+	if canRequest := current.dependencies.CanRequestModel; canRequest != nil && !canRequest() {
+		return nil
+	}
 	current.interruptModel()
 	built, err := current.dependencies.ContextBuilder.Build()
 	if err != nil {
@@ -549,7 +552,24 @@ func (current *coordinator) addItemToLocalState(
 				item.Data,
 			)
 		}
-		// FIXME: Forks leave inherited calls without results and retain pending-input accounting.
+		// A fork keeps the parent's context but cannot continue its operations.
+		// Close unresolved calls explicitly so every inherited call has an output.
+		keys := make([]toolCallKey, 0, len(current.state.toolCalls))
+		for key := range current.state.toolCalls {
+			keys = append(keys, key)
+		}
+		slices.SortFunc(keys, func(a, b toolCallKey) int {
+			if order := cmp.Compare(a.turnID, b.turnID); order != 0 {
+				return order
+			}
+			return cmp.Compare(a.callID, b.callID)
+		})
+		for _, key := range keys {
+			current.dependencies.ContextBuilder.AddToolResult(key.callID, []llm.ToolResultOutput{{Kind: llm.ToolResultText, Value: "This parent-session tool call was unfinished at the fork and will not continue in this session. Its result is unavailable; do not assume it succeeded."}}, false)
+		}
+		current.dependencies.ContextBuilder.Commit()
+		current.state.deliveredInputs = current.state.availableInputs
+		current.state.currentTurnInputs = current.state.availableInputs
 		clear(current.state.toolCalls)
 		clear(current.state.operations)
 		current.clearToolGrace()
