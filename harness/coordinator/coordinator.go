@@ -24,6 +24,9 @@ type Dependencies struct {
 	LLM                   llm.Adapter
 	Tools                 tool.Registry
 	Operations            operation.Manager
+	// CanRequestModel is called on the coordinator loop before starting a model
+	// request. A nil predicate permits requests.
+	CanRequestModel func() bool
 }
 
 type Coordinator interface {
