@@ -22,11 +22,14 @@ type approvalRequest struct {
 
 type approvalGate struct {
 	tool.Registry
-	config  *ConfigStore
-	ctx     context.Context
-	mu      sync.Mutex
-	pending []*approvalRequest
-	notify  func()
+	config     *ConfigStore
+	ctx        context.Context
+	mu         sync.Mutex
+	pending    []*approvalRequest
+	notify     func()
+	parent     *approvalGate
+	approveAll bool
+	workflow   bool
 }
 
 func (gate *approvalGate) Resolve(name string) (tool.Translator, bool) {
@@ -38,6 +41,9 @@ func (gate *approvalGate) Resolve(name string) (tool.Translator, bool) {
 }
 
 func (gate *approvalGate) Pending() *approvalRequest {
+	if gate.parent != nil {
+		return gate.parent.Pending()
+	}
 	gate.mu.Lock()
 	defer gate.mu.Unlock()
 	if len(gate.pending) == 0 {
@@ -47,6 +53,10 @@ func (gate *approvalGate) Pending() *approvalRequest {
 }
 
 func (gate *approvalGate) Decide(request *approvalRequest, allow bool) {
+	if gate.parent != nil {
+		gate.parent.Decide(request, allow)
+		return
+	}
 	gate.mu.Lock()
 	defer gate.mu.Unlock()
 	for i, pending := range gate.pending {
@@ -81,7 +91,7 @@ func (current guardedTranslator) Translate(ctx tool.Context, call llm.ToolCall) 
 	if mode == "plan" && (current.name == tool.BashName || current.name == "TaskWrite") {
 		return tool.ErrorStatus(fmt.Sprintf("%s is disabled in read-only plan mode", current.name), operation.DefaultMaxOutputLength)
 	}
-	if mode == "edit" && current.name == tool.BashName {
+	if (mode == "edit" || current.gate.parent != nil) && current.name == tool.BashName {
 		request := &approvalRequest{call: call, answer: make(chan bool, 1)}
 		current.gate.enqueue(request)
 		select {
@@ -98,6 +108,12 @@ func (current guardedTranslator) Translate(ctx tool.Context, call llm.ToolCall) 
 }
 
 func (model *uiModel) approvalView(request *approvalRequest) tea.View {
+	if model.workflow != nil && model.workflow.executor != nil && model.workflow.executor.approvals != nil && model.workflow.executor.approvals.Pending() == request {
+		return model.workflowOverlayView(func(content *uiModel) tea.View { return content.approvalContentView(request) })
+	}
+	return model.approvalContentView(request)
+}
+func (model *uiModel) approvalContentView(request *approvalRequest) tea.View {
 	var arguments struct {
 		Command string `json:"command"`
 	}
@@ -114,6 +130,9 @@ func (model *uiModel) approvalView(request *approvalRequest) tea.View {
 	body := append([]string(nil), lines[:min(4, len(lines))]...)
 	body = append(body, lines[4+top:min(len(lines), 4+top+visible)]...)
 	footer := "↑/↓ scroll   Y approve once   N/Esc deny"
+	if model.workflow != nil && model.workflow.executor != nil && model.workflow.executor.approvals != nil && model.workflow.executor.approvals.Pending() == request {
+		footer += "   A approve all commands for this run"
+	}
 	body = append(body, "", footer)
 	if len(body) > height {
 		body = body[:height]
@@ -126,13 +145,35 @@ func (model *uiModel) approvalView(request *approvalRequest) tea.View {
 	return view
 }
 
-// enqueue publishes a pending command for interactive approval.
+// Child workflow agents share the run's permission decision without changing config.
 func (gate *approvalGate) enqueue(request *approvalRequest) {
+	if gate.parent != nil {
+		gate.parent.enqueue(request)
+		return
+	}
 	gate.mu.Lock()
+	if gate.approveAll {
+		gate.mu.Unlock()
+		request.answer <- true
+		return
+	}
 	gate.pending = append(gate.pending, request)
 	notify := gate.notify
 	gate.mu.Unlock()
 	if notify != nil {
 		notify()
 	}
+}
+func (gate *approvalGate) AllowAll() {
+	if gate.parent != nil {
+		gate.parent.AllowAll()
+		return
+	}
+	gate.mu.Lock()
+	defer gate.mu.Unlock()
+	gate.approveAll = true
+	for _, request := range gate.pending {
+		request.answer <- true
+	}
+	gate.pending = nil
 }

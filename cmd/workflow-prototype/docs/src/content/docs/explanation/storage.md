@@ -25,7 +25,7 @@ the saved revision with the revision loaded by the process, then advance it.
 A stale process cannot silently overwrite a newer checkpoint.
 
 This revision check is not a distributed execution lease. Persistence does not
-provide exactly-once execution of external tools or agents. The standalone simulator does not perform external work. The generic `Next` API
+provide exactly-once execution of external tools or agents. The standalone simulator does not perform external work. Live REPL execution
 commits dispatch intent first and stops on unresolved dispatched work after a
 crash. It does not automatically retry ambiguous external operations.
 
@@ -59,9 +59,9 @@ out of ordinary executor inputs. Even the override requires an existing attempt
 and explicit executor and operation names.
 
 Keys identify work; they do not execute or deduplicate an external operation by
-themselves. Concrete adapters are supplied by applications. The generic `Next` API commits
-the attempt first and derives its external key through this boundary. Pass only
-that external key to the adapter. Adapters must honor it and reconcile interrupted requests.
+themselves. There are no live adapters yet. When added, dispatch must commit the
+attempt first, derive its external key through this boundary, and pass only that
+key to the adapter. Adapters must honor it and reconcile interrupted requests.
 The runner does not claim exactly-once effects.
 
 ## Retention and disk use
@@ -80,18 +80,43 @@ The database uses incremental vacuum and passive WAL checkpointing after cleanup
 These reduce reclaimable storage but do not impose a hard disk quota. Long-lived
 unfinished runs and large saved outputs can continue to consume disk space.
 
-## Generic execution boundary
+## Scope
 
-The shared `Next` API commits dispatch intent before calling an application-supplied
-executor. A recovered dispatched operation without a committed result returns
-`ErrReconciliationRequired`; it is not automatically retried. `Reconcile` records
-an explicit decision with a reason and audit history. Callers must verify external
-evidence and establish that the previous executor stopped before retrying.
+This database is shared by the workflow simulator and live REPL workflow runner.
+A saved execution mode prevents opening simulator runs as live runs, or vice versa.
+The harness's existing local-file session store remains separate and stores child
+agent sessions. Cross-run result caching and distributed scheduling are not provided.
 
-Saved execution mode separates simulator and live runs. No concrete command,
-agent, worktree, receipt store, or recovery UI adapter is included at this layer.
-The harness's local-file session store remains separate. Cross-run result caching,
-distributed scheduling, and exactly-once external effects are not provided.
+The live runner refuses unresolved dispatched work with `ErrReconciliationRequired`.
+The REPL recovery panel inspects evidence and offers verified-result, failure,
+and retry decisions. State changes require a reason and explicit confirmation;
+retry also requires the exact step-specific confirmation phrase. Decisions are
+audited. Completed results can be reused; unknown external outcomes are never
+automatically converted into success or retried.
+
+## Execution receipts and evidence
+
+The live executor records operation receipts separately from SQLite checkpoints.
+A matching terminal receipt can preserve a result across the gap between external
+completion and saving the workflow node. Matching includes operation identity,
+inputs, and executor configuration. Pending receipts do not establish completion.
+
+Read-only recovery probes may suggest a saved terminal result or verified clean
+worktree at its pinned base. The suggestion still requires explicit acceptance.
+A mapped child-session ID is a pointer to evidence, not proof of agent completion.
+Evidence probes never replay commands or create worktrees.
+
+Retry preserves the existing attempt's identity and inputs. It does not increment
+a repair phase or create a new logical operation. Ensure the prior executor has
+stopped before retrying; revision checks alone do not stop an old external process.
+The run remains paused after reconciliation until resumed by the user.
+
+After run cleanup, a separate receipt pass deletes at most 100 terminal receipts
+older than seven days, and only after confirming their run is absent. Active runs,
+existing runs, failed or unresolved receipts, malformed records, and legacy receipts
+without run identity are preserved. SQLite vacuum does not remove receipt files.
+This retention policy does not impose a hard disk quota. See
+[recovery controls](/guides/live-workflows/#reconcile-an-interrupted-step).
 
 See [CLI reference](/reference/cli/#workflow-run-storage) for storage paths and
-[resume tutorial](/tutorials/resume-workflow/) for a concrete simulator walkthrough.
+[resume tutorial](/tutorials/resume-workflow/) for a concrete walkthrough.

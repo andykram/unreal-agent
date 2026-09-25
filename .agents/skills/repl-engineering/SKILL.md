@@ -1,6 +1,6 @@
 ---
 name: repl-engineering
-description: Improve the Go terminal REPL's editor, viewport, popups, tool cards, session navigation, approvals, model status, or configuration reload. Use for CLI interaction changes and regressions in cmd/internal/repl, not provider execution changes alone.
+description: Improve the Go terminal REPL's editor, viewport, popups, tool cards, session and workflow navigation, approvals, model status, or configuration reload. Use for CLI interaction changes and regressions in cmd/internal/repl, not workflow DSL or provider execution changes alone.
 ---
 
 # REPL engineering
@@ -42,6 +42,12 @@ Session switching observes active and queued work constraints. Keep those checks
 
 Read [sessions.go](../../../cmd/internal/repl/sessions.go), [sessions_test.go](../../../cmd/internal/repl/sessions_test.go), and [session_menu.go](../../../cmd/internal/repl/session_menu.go).
 When changing fork behavior, verify the inherited transcript still contains usable tool results. A sidebar rendering test does not establish provider replay correctness.
+
+## Workflow threads and overlays
+
+Before changing workflow navigation, approvals, recovery views, or prompt inspection,
+read [workflow UI](references/workflow-ui.md). It defines background-panel ownership,
+run-scoped permissions, overlay routing, and the interaction tests that catch hidden controls.
 
 ## Report context and metadata honestly
 

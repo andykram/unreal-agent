@@ -46,6 +46,9 @@ func (model *uiModel) refreshCompletion() {
 		for _, command := range commandRegistry() {
 			if strings.HasPrefix(command.Name, name) {
 				value := command.Name
+				if value == "/workflow" {
+					value += " "
+				}
 				popup.choices = append(popup.choices, commandChoice{Label: value, Description: command.Description, Value: value})
 			}
 		}
@@ -98,6 +101,10 @@ func (model *uiModel) acceptCompletion() {
 	}
 	model.completion = nil
 	model.suppressCompletion = true
+	if choice.Value == "/workflow " || strings.HasPrefix(choice.Value, "/workflow ") && strings.HasSuffix(choice.Value, "/") {
+		model.suppressCompletion = false
+		model.refreshCompletion()
+	}
 }
 
 func (popup *commandPopup) view(width, available int) []string {

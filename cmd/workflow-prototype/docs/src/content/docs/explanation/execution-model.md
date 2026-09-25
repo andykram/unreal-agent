@@ -4,8 +4,8 @@ description: Understand static graphs, runtime outcomes, skipped branches, and p
 ---
 
 This page describes the standalone simulator. The shared graph, validation, and
-storage library also exposes a generic execution interface. Its `Next` operation
-commits dispatch intent before calling an application-supplied executor.
+storage implementation also powers [live REPL workflows](/guides/live-workflows/).
+Live execution uses real adapters and commits dispatch intent before external work.
 
 ## Python describes work; Go owns state
 
@@ -112,4 +112,4 @@ stdout uses host memory. This is a feasibility sandbox, not a completed security
 
 Arbitrary Python interpreter checkpointing is unsupported. Native package
 compatibility needs separate validation. Worktrunk is metadata in the simulator;
-a concrete application must supply a worktree backend.
+the REPL supplies a real pluggable worktree backend.

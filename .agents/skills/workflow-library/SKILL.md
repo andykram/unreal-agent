@@ -7,9 +7,9 @@ description: Extend the repository's Python WASI workflow DSL, structured datafl
 
 Shared implementation lives in `harness/workflow` in the root Go module. Python
 authors a graph and exits. `cmd/workflow-prototype` remains a separate simulator
-client. The shared engine exposes a generic executor interface; concrete command,
-agent, and worktree adapters are not included. Validate the root module when
-changing shared code, and the simulator module when changing its client.
+client. The REPL `/workflow` runs live commands, child agents, and worktrees through
+[its executor](../../../cmd/internal/repl/workflow_executor.go). Validate the root
+module when changing shared code, and the simulator module when changing its client.
 
 ## Follow the contract across layers
 
@@ -65,6 +65,23 @@ skills. Catalog-only stubs constrain names but infer no argument contract.
 Regenerate both runtime and `.pyi` outputs after changing inference. Read the
 [typing guide](../../../cmd/workflow-prototype/typing/README.md) for fixtures.
 
+## Additive prompts and execution evidence
+
+`system_prompt_append` applies to agent steps and reusable `Agent` bindings;
+`repair_system_prompt_append` applies to repeat-check repair agents. Preserve the
+configured base prompt, workspace instructions, skill preamble, and mode restrictions.
+Validate field types and applicable step kinds in Python and Go. Keep generated
+stubs and the live executor aligned; successful graph export alone does not prove
+that an instruction reaches the model.
+
+Inspect [runtime prompt assembly](../../../cmd/internal/repl/app.go),
+[executor integration](../../../cmd/internal/repl/workflow_executor.go), and
+[prompt snapshots](../../../cmd/internal/repl/workflow_prompt.go). Prompt inspection
+uses captured system and expanded user text for that attempt. Do not reconstruct a
+historical prompt from today's files and label it as executed. Legacy runs may lack
+snapshots. Verify provider-bound content and restored evidence with the
+[HTTP fixture](../../../cmd/internal/repl/workflow_agent_approval_test.go).
+
 ## Examples and documentation
 
 Use [delivery_pipeline.py](../../../cmd/workflow-prototype/examples/delivery_pipeline.py)
@@ -77,11 +94,11 @@ missing markers deliberately fail the build. Do not replace imports with copies.
 
 ## Validate the changed boundary
 
-For shared code, run focused root-module checks:
+For shared code and live integration, run focused root-module checks:
 
 ```sh
-CGO_ENABLED=0 go test ./harness/workflow
-CGO_ENABLED=0 go vet ./harness/workflow
+CGO_ENABLED=0 go test ./harness/workflow ./cmd/internal/repl
+CGO_ENABLED=0 go vet ./harness/workflow ./cmd/internal/repl
 ```
 
 Run these client checks from `cmd/workflow-prototype` when relevant:

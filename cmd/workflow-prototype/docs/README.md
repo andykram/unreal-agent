@@ -25,10 +25,10 @@ Setup follows the [official Starlight manual setup](https://starlight.astro.buil
 ## Maintaining content
 
 Pages live in `src/content/docs/`. Keep tutorials, reference, explanations,
-and task guides separate. Update these pages alongside changes to shared `harness/workflow` sources,
+and task guides separate. Update these pages alongside changes to shared `harness/workflow` sources, REPL workflow integration,
 `../main.go`, `../run.sh`, and the Python examples.
 
-Distinguish standalone simulation from generic executor integration. Source examples are
+Distinguish standalone simulation from live REPL execution. Source examples are
 imported directly into the annotated guide. Simulator observations do not prove
 real provider compatibility or external side-effect recovery.
 

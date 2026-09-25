@@ -71,6 +71,18 @@ the UI or provider request.
 - Skill loading resolves registered names to paths. Do not ask models to invent
   filesystem locations. Follow [SkillUse](../../../harness/tool/skill_use.go).
 
+## Keep prototype claims separate
+
+The graph, WASI compiler, SQLite storage, and live runner now live in
+[harness/workflow](../../../harness/workflow). The REPL executor binds real
+commands, child harness agents, and a pluggable Worktrunk backend. The separate
+`cmd/workflow-prototype` client still simulates operations. Keep simulator evidence,
+shared-engine tests, and real provider/worktree execution claims distinct.
+
+Live dispatch intent is committed before adapter calls. Interrupted dispatched
+work stops for reconciliation, without automatic retry. Child agent sessions retain
+the existing harness tool/question machinery. Plan mode rejects live execution.
+
 ## Validate the changed boundary
 
 From the repository root, choose the relevant focused tests:
