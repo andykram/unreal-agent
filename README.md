@@ -4,6 +4,7 @@ An async-first agent harness from Unreal Labs.
 
 - [harness/](harness/) — the library.
 - [cmd/](cmd/) — executables that use the library.
+- [Interactive REPL](cmd/cli/README.md) — terminal client with saved sessions, settings, and image attachments.
 - [benchmarks/](benchmarks/) — benchmark runners.
 
 ## Glossary
