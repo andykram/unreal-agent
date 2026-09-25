@@ -77,13 +77,15 @@ func TestRunSelectsToolsFromStartupConfiguration(t *testing.T) {
 				t.Fatalf("advertised tools = %v, want %v", names, test.want)
 			}
 			system := request.Input[0].Data.(llm.Message)
+			if strings.Contains(system.Text, "<location>") {
+				t.Fatal("skill index requires file locations")
+			}
 			wantSkills := slices.Contains(test.want, "SkillUse")
 			for _, text := range []string{
 				"Use SkillUse",
 				"<available_skills>",
 				"<name>review</name>",
 				"Review code.",
-				filepath.Join(workspace, ".harness", "skills", "review", "SKILL.md"),
 			} {
 				if strings.Contains(system.Text, text) != wantSkills {
 					t.Errorf("system prompt contains %q = %v, want %v", text, !wantSkills, wantSkills)
