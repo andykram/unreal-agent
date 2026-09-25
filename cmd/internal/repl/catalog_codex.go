@@ -51,7 +51,7 @@ func (catalog *ModelCatalog) discoverCodex(ctx context.Context, base string, res
 		return result
 	}
 	if len(data) > 8<<20 {
-		result.Err = fmt.Errorf("Codex catalog exceeds 8 MiB")
+		result.Err = fmt.Errorf("model catalog from Codex exceeds 8 MiB")
 		return result
 	}
 	var parsed struct {

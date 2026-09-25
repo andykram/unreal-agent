@@ -212,16 +212,6 @@ func ProjectParsed(source string, cursor, width int, markdown bool, spans []Synt
 	return result
 }
 
-func spanActive(source string, cursor int, span SourceRange) bool {
-	graphemes := uniseg.NewGraphemes(source)
-	boundaries := []int{0}
-	for graphemes.Next() {
-		_, end := graphemes.Positions()
-		boundaries = append(boundaries, end)
-	}
-	return spanActiveBoundaries(boundaries, cursor, span)
-}
-
 func spanActiveBoundaries(boundaries []int, cursor int, span SourceRange) bool {
 	before, after := span.Start, span.End
 	if index := sort.SearchInts(boundaries, span.Start); index > 0 && index < len(boundaries) && boundaries[index] == span.Start {

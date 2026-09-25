@@ -355,7 +355,7 @@ func TestCodexCatalogCachesAccountMetadataAndRefusesRedirects(t *testing.T) {
 	}
 	redirected := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { t.Error("followed subscription redirect") }))
 	defer redirected.Close()
-	redirect := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { http.Redirect(w, r, redirected.URL, 302) }))
+	redirect := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { http.Redirect(w, r, redirected.URL, http.StatusFound) }))
 	defer redirect.Close()
 	if err := config.SaveSettings(map[string]any{"providers.openai-codex.base_url": redirect.URL}); err != nil {
 		t.Fatal(err)

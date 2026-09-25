@@ -184,7 +184,7 @@ func (buffer *Buffer) Up() bool {
 }
 
 func (buffer *Buffer) Down() bool {
-	end := len(buffer.source)
+	var end int
 	if offset := strings.Index(buffer.source[buffer.cursor:], "\n"); offset >= 0 {
 		end = buffer.cursor + offset
 	} else {
