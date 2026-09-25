@@ -33,7 +33,7 @@ not approve or integrate changes.
 
 ## Interactive commands
 
-Each command requires Enter. These are line-oriented viewer commands.
+Each command requires Enter. These are viewer commands, not REPL shortcuts.
 
 | Command | Behavior |
 | --- | --- |

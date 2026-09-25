@@ -43,3 +43,10 @@ Each pull request adds its entry here. PR links provide stable history across re
 - Add model and effort switching, cached model catalogs, context-token reporting, and configurable status styling.
 - Add task tracking, skill search and completion, configuration reload, and system-prompt inspection and overrides.
 - Add interactive questions and command approvals, with queued prompts and steering.
+
+### Live workflows in the REPL ([#8](https://github.com/andykram/unreal-agent/pull/8))
+
+- Run Python workflows with `/workflow` file completion, live agent and command execution, and Worktrunk-backed worktrees.
+- Track multiple workflow threads in the sidebar with dependency views, formatted step details, and full-prompt inspection.
+- Support run-wide or per-command approvals with keyboard and mouse controls, while preserving explicit workflow review checkpoints.
+- Add execution receipts and reconciliation controls to inspect interrupted work and choose recovery actions before resuming.

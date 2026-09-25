@@ -33,6 +33,7 @@ func commandRegistry() []commandSpec {
 		{Name: "/settings", Description: "Edit persistent settings", Run: (*uiModel).runSettings},
 		{Name: "/system-prompt", Description: "Show the effective loaded system prompt", Run: (*uiModel).runSystemPrompt},
 		{Name: "/plan", Description: "Review and comment on the latest assistant response", Run: (*uiModel).runPlan},
+		{Name: "/workflow", Description: "Compile and run a Python workflow", ArgumentHint: "[name.py | path | resume run-id]", Complete: completeWorkflowArgument, Run: (*uiModel).runWorkflow},
 		{Name: "/context", Description: "Show this session's context breakdown", Run: (*uiModel).runContext},
 		{Name: "/resume", Description: "Resume a named session", ArgumentHint: "[name-or-id]", Complete: completeResumeArgument, Run: (*uiModel).runResume},
 		{Name: "/new", Description: "Start a new session", Run: (*uiModel).runNew},
@@ -44,8 +45,11 @@ func commandRegistry() []commandSpec {
 	}
 }
 
-// splitCommand separates the command name from its argument.
+// splitCommand keeps the workflow path intact, including spaces after the colon.
 func splitCommand(raw string) (name, argument string, hasArguments bool) {
+	if path, ok := strings.CutPrefix(raw, "/workflow:"); ok {
+		return "/workflow", path, true
+	}
 	return strings.Cut(raw, " ")
 }
 
@@ -66,6 +70,9 @@ func (model *uiModel) runHelp(_, _ string) (tea.Model, tea.Cmd) {
 	var lines []string
 	for _, command := range commandRegistry() {
 		name, hint := command.Name, command.ArgumentHint
+		if name == "/workflow" {
+			name, hint = "/workflow", "<path.py> (or resume ID)"
+		}
 		lines = append(lines, fmt.Sprintf("%s %s · %s", name, hint, command.Description))
 	}
 	lines = append(lines, "Readline: Ctrl+A/E line edges · Ctrl+B/F character · Alt+B/F word · Ctrl+W/Alt+D delete word · Ctrl+U/Alt+K kill line · Ctrl+Y yank · Ctrl+Z undo · Ctrl+Shift+Z redo")
@@ -75,6 +82,10 @@ func (model *uiModel) runHelp(_, _ string) (tea.Model, tea.Cmd) {
 }
 
 func (model *uiModel) runQuit(_, raw string) (tea.Model, tea.Cmd) {
+	if model.hasRunningWorkflow() {
+		model.message = "A workflow step is running. Press Ctrl+C to stop it first."
+		return model, nil
+	}
 	if model.busy || model.runtime != nil && model.runtime.QueueLength() > 0 {
 		model.message = "Work or queued prompts remain. Press Ctrl+C to stop work first."
 		return model, nil

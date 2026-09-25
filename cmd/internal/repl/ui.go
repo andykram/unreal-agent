@@ -70,6 +70,8 @@ type uiModel struct {
 	sessionMenu             *sessionContextMenu
 	approvalTop             int
 	plan                    *planReview
+	workflow                *workflowPanel
+	workflows               []*workflowPanel
 	setupError              error
 	ctx                     context.Context
 	getenv                  func(string) string
@@ -230,9 +232,35 @@ func (model *uiModel) waitRuntime() tea.Cmd {
 
 func (model *uiModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 	switch value := message.(type) {
+	case workflowEvidenceMsg:
+		return model.acceptWorkflowEvidence(value)
+	case workflowReconciledMsg:
+		return model.acceptWorkflowReconciliation(value)
+
+	case workflowResultMsg:
+		return model.acceptWorkflowResult(value)
+	case workflowTickMsg:
+		return model.advanceWorkflowTick(value)
+
 	case tea.MouseWheelMsg:
 		model.disarmQuit()
 		if model.powerBar != nil || model.sessionMenu != nil || model.rename != nil {
+			return model, nil
+		}
+		if model.workflow != nil && model.workflow.visible && model.workflow.recovery != nil {
+			delta := 3
+			if value.Button == tea.MouseWheelUp {
+				delta = -3
+			}
+			model.workflow.recovery.top = max(0, model.workflow.recovery.top+delta)
+			return model, nil
+		}
+		if model.workflow != nil && model.workflow.visible {
+			delta := 3
+			if value.Button == tea.MouseWheelUp {
+				delta = -3
+			}
+			model.moveWorkflowSelection(delta)
 			return model, nil
 		}
 		model.disarmQuit()
@@ -264,6 +292,33 @@ func (model *uiModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		if model.sessionMenu != nil {
 			return model.clickSessionMenu(value)
 		}
+		if model.workflow != nil && model.workflow.visible && model.workflow.approvalChoice {
+			if value.Button == tea.MouseLeft && value.X < model.width-model.sidebarSize() {
+				if key := model.workflow.approvalRows[value.Y]; key != "" {
+					return model.updateWorkflowApproval(tea.KeyPressMsg{Code: rune(key[0])})
+				}
+			}
+			return model, nil
+		}
+		if model.workflow != nil && model.workflow.visible && model.workflow.recovery != nil {
+			recovery := model.workflow.recovery
+			if !model.workflow.loading && recovery.stage == "inspect" && value.Button == tea.MouseLeft && (model.width-model.sidebarSize() < 100 || value.X >= (model.width-model.sidebarSize())*55/100+3) {
+				if action, ok := recovery.rows[value.Y]; ok {
+					recovery.action = action
+					return model.selectRecoveryAction()
+				}
+			}
+			return model, nil
+		}
+		if model.workflow != nil && model.workflow.visible {
+			if value.Button == tea.MouseLeft && value.X < model.workflow.graphWidth {
+				if index, ok := model.workflow.rows[value.Y]; ok {
+					model.workflow.selected = index
+					model.workflow.detailTop = 0
+				}
+			}
+			return model, nil
+		}
 		model.disarmQuit()
 		if model.powerBar != nil {
 			return model, nil
@@ -293,6 +348,13 @@ func (model *uiModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if model.rename != nil {
 			return model.updateRenameSession(value)
+		}
+		if model.workflow != nil && model.workflow.visible && model.workflow.recovery != nil {
+			model.pasteWorkflowRecovery(value.Content)
+			return model, nil
+		}
+		if model.workflow != nil && model.workflow.visible && !(model.question != nil && model.showQuestion) {
+			return model, nil
 		}
 		if model.historySearch != nil {
 			model.historySearch.appendQuery(value.Content)
@@ -372,10 +434,16 @@ func (model *uiModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		if model.rename != nil {
 			return model.updateRenameSession(value)
 		}
-		if model.runtime != nil && model.runtime.options.Approvals != nil {
-			gate := model.runtime.options.Approvals
+		if model.workflow != nil && model.workflow.visible && model.workflow.approvalChoice {
+			return model.updateWorkflowApproval(value)
+		}
+		if gate := model.interactionApprovalGate(); gate != nil {
 			if request := gate.Pending(); request != nil {
 				switch value.String() {
+				case "a", "A", "shift+a":
+					if model.workflow != nil && model.workflow.executor != nil && model.workflow.executor.approvals != nil && model.workflow.executor.approvals.Pending() == request {
+						model.workflow.executor.approvals.AllowAll()
+					}
 				case "y", "Y", "shift+y":
 					gate.Decide(request, true)
 					model.approvalTop = 0
@@ -394,6 +462,16 @@ func (model *uiModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			return model, tea.Quit
 		}
 
+		if model.workflow != nil && model.workflow.visible {
+			if model.question != nil && model.showQuestion {
+				return model.updateQuestion(value)
+			}
+			if value.String() == "ctrl+q" {
+				model.showQuestion = true
+				return model, nil
+			}
+			return model.updateWorkflow(value)
+		}
 		if model.plan != nil {
 			return model.updatePlan(value)
 		}
@@ -562,11 +640,11 @@ func (model *uiModel) updateSettings(message tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (model *uiModel) syncQuestion() tea.Cmd {
-	if model.runtime == nil {
+	if model.interactionRuntime() == nil {
 		model.question = nil
 		return nil
 	}
-	questions := model.runtime.Questions()
+	questions := model.interactionRuntime().Questions()
 	if len(questions) == 0 {
 		model.question = nil
 		model.showQuestion = false
@@ -589,7 +667,7 @@ func (model *uiModel) updateQuestion(message tea.Msg) (tea.Model, tea.Cmd) {
 			case "esc", "r", "R":
 				model.dismissQuestion = false
 			case "d", "D":
-				if err := model.runtime.AnswerQuestion(model.question.id, AskUserResult{Status: "dismissed"}); err != nil {
+				if err := model.interactionRuntime().AnswerQuestion(model.question.id, AskUserResult{Status: "dismissed"}); err != nil {
 					model.message = err.Error()
 				} else {
 					model.question.submitted = true
@@ -613,7 +691,7 @@ func (model *uiModel) updateQuestion(message tea.Msg) (tea.Model, tea.Cmd) {
 	}
 	command := model.question.Update(message)
 	if model.question.form.State == huh.StateCompleted && !model.question.submitted {
-		if err := model.runtime.AnswerQuestion(model.question.id, model.question.Result()); err != nil {
+		if err := model.interactionRuntime().AnswerQuestion(model.question.id, model.question.Result()); err != nil {
 			model.message = err.Error()
 		} else {
 			model.question.submitted = true
@@ -774,6 +852,15 @@ func (model *uiModel) interrupt() (tea.Model, tea.Cmd) {
 	}
 	model.quitArmed = true
 	model.message = "Press Ctrl+C again to exit."
+	if model.workflow != nil && model.workflow.visible && (model.workflow.loading || model.workflow.auto) {
+		model.workflow.auto = false
+		if model.workflow.cancel != nil {
+			model.workflow.cancel()
+		}
+		model.workflow.err = "Stopping workflow. Press Ctrl+C again to exit."
+		return model, nil
+	}
+
 	if model.busy && model.runtime != nil {
 		if err := model.runtime.Stop(context.Background()); err != nil {
 			model.message = err.Error() + " · Press Ctrl+C again to exit."
@@ -840,6 +927,11 @@ func (model *uiModel) submit(steer bool) (tea.Model, tea.Cmd) {
 	if strings.HasPrefix(strings.TrimSpace(raw), "//") {
 		raw = strings.Replace(raw, "//", "/", 1)
 	}
+	if model.hasRunningWorkflow() {
+		model.message = "A workflow step is still running. Use /workflow to return or Ctrl+C to stop."
+		return model, nil
+	}
+
 	if model.runtime == nil {
 		model.message = fmt.Sprintf("Model setup required: %v", model.setupError)
 		return model, nil
@@ -1004,12 +1096,18 @@ func (model *uiModel) viewContent() tea.View {
 		panel := lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color(model.palette().lilac)).Padding(1, 2).Width(max(10, min(58, model.width-6))).Render(content)
 		return tea.NewView(lipgloss.Place(model.width, model.height, lipgloss.Center, lipgloss.Center, panel))
 	}
-	if model.runtime != nil && model.runtime.options.Approvals != nil {
-		gate := model.runtime.options.Approvals
+	if model.workflow != nil && model.workflow.visible && model.workflow.approvalChoice {
+		return model.workflowApprovalView()
+	}
+	if gate := model.interactionApprovalGate(); gate != nil {
 		if request := gate.Pending(); request != nil {
 			return model.approvalView(request)
 		}
 	}
+	if model.workflow != nil && model.workflow.visible && !(model.question != nil && model.showQuestion) {
+		return model.workflowView()
+	}
+
 	if model.plan != nil {
 		return model.planView()
 	}

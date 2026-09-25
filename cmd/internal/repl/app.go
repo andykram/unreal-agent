@@ -93,6 +93,7 @@ func RunCLI(ctx context.Context, args []string, getenv func(string) string, inpu
 		defer runtime.Close()
 	}
 	model := newUI(ctx, getenv, *heartbeat, state, config, router, catalog, runtime, modelError)
+	defer model.closeWorkflow()
 	defer model.cleanupAttachments()
 	defer model.cleanupHistoryDraftAttachments()
 	defer func() {
@@ -156,6 +157,10 @@ func parseResumeOption(args []string) (resumeChoice, []string, error) {
 }
 
 func newAppRuntime(ctx context.Context, state *SessionState, router *ModelRouter, getenv func(string) string, heartbeat time.Duration) (*Runtime, error) {
+	return newAppRuntimeWithFormat(ctx, state, router, getenv, heartbeat, nil)
+}
+
+func newAppRuntimeWithFormat(ctx context.Context, state *SessionState, router *ModelRouter, getenv func(string) string, heartbeat time.Duration, format *llm.OutputFormat, systemPromptAppend ...string) (*Runtime, error) {
 	provenance := newResponseProvenance(state)
 	router.SetProvenance(provenance)
 	id := session.ID(state.Current.SessionID)
@@ -203,8 +208,8 @@ func newAppRuntime(ctx context.Context, state *SessionState, router *ModelRouter
 		}
 		skillAccess.SetAllowed(catalog, explicit)
 		builder := contextbuilder.NewBuilder(catalog.ModelSkills(explicit)...)
-		builder.SetModel(llm.Model{ID: router.Selected().ID})
-		prompt := cliSystemPrompt(state.Workspace, instructions.Prompt(), router.config.Current().SystemPrompt)
+		builder.SetModel(llm.Model{ID: router.Selected().ID, OutputFormat: format})
+		prompt := cliSystemPrompt(state.Workspace, instructions.Prompt(), router.config.Current().SystemPrompt, systemPromptAppend...)
 		if router.config.Current().Mode == "plan" {
 			prompt += "\n\nPlan mode is read-only. Do not change files or run commands. Investigate with read-only tools, then produce a clear, actionable plan for the user to review and revise."
 		}
@@ -268,6 +273,12 @@ func newAppRuntime(ctx context.Context, state *SessionState, router *ModelRouter
 	return runtime, nil
 }
 
-func cliSystemPrompt(workspace, instructions, prompt string) string {
-	return strings.TrimSpace(prompt) + "\n\nWorkspace: " + workspace + "\n\n" + instructions
+func cliSystemPrompt(workspace, instructions, prompt string, additions ...string) string {
+	result := strings.TrimSpace(prompt) + "\n\nWorkspace: " + workspace + "\n\n" + instructions
+	for _, addition := range additions {
+		if strings.TrimSpace(addition) != "" {
+			result += "\n\n" + addition
+		}
+	}
+	return result
 }
