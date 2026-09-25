@@ -35,3 +35,11 @@ Each pull request adds its entry here. PR links provide stable history across re
 - Persist execution checkpoints and memoized results, with recovery decisions, idempotency keys, executor key isolation, and retention cleanup.
 - Generate Python skill types from skill metadata and documented parameters.
 - Add an interactive execution simulator, complex examples, and annotated developer guides published through GitHub Pages. Live execution is a separate integration.
+
+### Interactive terminal REPL ([#7](https://github.com/andykram/unreal-agent/pull/7))
+
+- Add an interactive CLI with a Markdown editor, readline shortcuts, searchable prompt history, image attachments, and collapsible tool output.
+- Add resumable named sessions, session forks, a resizable sidebar, and a command palette.
+- Add model and effort switching, cached model catalogs, context-token reporting, and configurable status styling.
+- Add task tracking, skill search and completion, configuration reload, and system-prompt inspection and overrides.
+- Add interactive questions and command approvals, with queued prompts and steering.

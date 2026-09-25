@@ -8,5 +8,7 @@ The root module commands do not cover the separate `cmd/workflow-prototype` modu
 
 For changes in these areas, read the matching repository skill. Load additional skills only when the change crosses their boundaries.
 
+- [Harness engineering](.agents/skills/harness-engineering/SKILL.md): coordinator, persisted sessions, tools, providers, and model requests.
 - [Workflow library](.agents/skills/workflow-library/SKILL.md): Python/WASI API, graph dataflow, structured outputs, generated skill types, and developer docs.
 - [Workflow durability](.agents/skills/workflow-durability/SKILL.md): checkpoints, recovery, retention, memoization, and executor key isolation.
+- [REPL engineering](.agents/skills/repl-engineering/SKILL.md): terminal rendering, input, sessions, approval UI, configuration, and model catalogs.
