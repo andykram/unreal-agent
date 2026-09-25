@@ -72,7 +72,7 @@ func (translator *skillUseTranslator) TranslateResult(
 	case operation.StatusCompleted:
 		return llm.ToolResult{
 			CallID: callID,
-			Output: []llm.ToolResultOutput{{Kind: llm.ToolResultText, Value: strings.ToValidUTF8(string(state.Content), "\uFFFD")}},
+			Output: []llm.ToolResultOutput{{Kind: llm.ToolResultText, Value: fmt.Sprintf("Skill file: %s\n\n%s", state.Path, strings.ToValidUTF8(string(state.Content), "\uFFFD"))}},
 		}, nil
 	case operation.StatusReady, operation.StatusAwaiting, operation.StatusCanceling:
 		return llm.ToolResult{CallID: callID, Output: []llm.ToolResultOutput{{Kind: llm.ToolResultText, Value: "Skill is loading."}}}, nil

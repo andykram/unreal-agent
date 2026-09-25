@@ -294,10 +294,10 @@ func TestBuilderAppendsSkillsToPreamble(t *testing.T) {
 	want := preamble + `
 
 The following skills provide specialized instructions for specific tasks.
-Use SkillUse to load a skill's file when the task matches its description.
-When a skill file references a relative path, resolve it against the skill directory (parent of SKILL.md / dirname of the path) and use that absolute path in tool calls.
+Use SkillUse with {"name":"skill-name"} when a task matches a skill description. Supply the exact indexed name, not a file path. The harness resolves the name and loads the skill.
+The loaded result includes the skill file location. Resolve relative references against that file's parent directory.
 
-<available_skills><skill><name>go-review</name><description>Review &lt;Go&gt; &amp; &#34;tests&#34;</description><location>/skills/reviewer&#39;s/SKILL.md</location></skill><skill><name>documents</name><description>Edit documents</description><location>/skills/documents/SKILL.md</location></skill></available_skills>
+<available_skills><skill><name>go-review</name><description>Review &lt;Go&gt; &amp; &#34;tests&#34;</description></skill><skill><name>documents</name><description>Edit documents</description></skill></available_skills>
 
 Be concise.`
 	if got := result.Request.Input[0].Data.(llm.Message).Text; got != want {

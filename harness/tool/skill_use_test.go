@@ -45,7 +45,7 @@ func TestSkillUseLoadsRegisteredSkillByName(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.CallID != "call-1" || result.Output[0].Value != want {
+	if result.CallID != "call-1" || result.Output[0].Value != "Skill file: "+path+"\n\n"+want {
 		t.Fatalf("result = %#v", result)
 	}
 }
