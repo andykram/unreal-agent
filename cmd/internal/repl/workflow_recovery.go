@@ -151,7 +151,7 @@ func (model *uiModel) recoveryDecision() (workflow.Reconciliation, error) {
 	recovery := model.workflow.recovery
 	reason := strings.TrimSpace(recovery.note.Source())
 	if reason == "" {
-		return workflow.Reconciliation{}, fmt.Errorf("Add how you verified the outcome, or why this action is safe.")
+		return workflow.Reconciliation{}, fmt.Errorf("add how you verified the outcome, or why this action is safe")
 	}
 	decision := workflow.Reconciliation{Reason: reason}
 	switch recovery.action {
@@ -159,11 +159,11 @@ func (model *uiModel) recoveryDecision() (workflow.Reconciliation, error) {
 		decision.Action = "accept"
 		raw := recovery.result.Source()
 		if !json.Valid([]byte(raw)) {
-			return decision, fmt.Errorf("Result must be one JSON object containing output, workspace, and exit_code as applicable.")
+			return decision, fmt.Errorf("result must be one JSON object containing output, workspace, and exit_code as applicable")
 		}
 		var fields map[string]json.RawMessage
 		if err := json.Unmarshal([]byte(raw), &fields); err != nil || fields == nil || len(fields) == 0 {
-			return decision, fmt.Errorf("Result must be a nonempty JSON object.")
+			return decision, fmt.Errorf("result must be a nonempty JSON object")
 		}
 		var kind string
 		for _, step := range model.workflow.graph.Steps {
@@ -175,12 +175,12 @@ func (model *uiModel) recoveryDecision() (workflow.Reconciliation, error) {
 		phase := model.workflow.state[recovery.stepID].Phase
 		if kind == "command" || kind == "repeat_check" && phase != "repair" {
 			if value, ok := fields["exit_code"]; !ok || string(value) == "null" {
-				return decision, fmt.Errorf("Provide an explicit integer exit_code for the verified command.")
+				return decision, fmt.Errorf("provide an explicit integer exit_code for the verified command")
 			}
 		}
 		if kind == "agent" || kind == "repeat_check" && phase == "repair" {
 			if _, ok := fields["output"]; !ok {
-				return decision, fmt.Errorf("Provide the verified output explicitly.")
+				return decision, fmt.Errorf("provide the verified output explicitly")
 			}
 		}
 		var envelope recoveryResultEnvelope
@@ -196,7 +196,7 @@ func (model *uiModel) recoveryDecision() (workflow.Reconciliation, error) {
 	case 3:
 		decision.Action = "retry"
 	default:
-		return decision, fmt.Errorf("Choose a recovery action.")
+		return decision, fmt.Errorf("choose a recovery action")
 	}
 	return decision, nil
 }

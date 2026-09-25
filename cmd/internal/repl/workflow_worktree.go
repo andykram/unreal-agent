@@ -77,7 +77,7 @@ func (backend worktrunkWorkflowBackend) Create(ctx context.Context, repo, branch
 		return "", err
 	}
 	if created == "" {
-		return "", fmt.Errorf("Worktrunk returned without a worktree for branch %q; inspect wt list", branch)
+		return "", fmt.Errorf("worktree missing after Worktrunk returned for branch %q; inspect wt list", branch)
 	}
 	return created, nil
 }
