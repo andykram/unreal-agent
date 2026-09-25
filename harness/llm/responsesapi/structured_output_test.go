@@ -3,10 +3,12 @@ package responsesapi
 import (
 	"encoding/json/jsontext"
 	"encoding/json/v2"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/unreallabsai/unreal-agent/harness/contextbuilder"
@@ -111,9 +113,9 @@ func TestInvalidOutputFormatReturnsEncodingError(t *testing.T) {
 }
 
 func TestProviderStructuredOutputRejectionIsNotRetriedAsPlainText(t *testing.T) {
-	requests := 0
+	var requests atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		requests++
+		requests.Add(1)
 		var body map[string]any
 		if err := json.UnmarshalRead(request.Body, &body); err != nil {
 			t.Error(err)
@@ -133,7 +135,70 @@ func TestProviderStructuredOutputRejectionIsNotRetriedAsPlainText(t *testing.T) 
 	if err == nil || !strings.Contains(err.Error(), "json_schema unsupported") {
 		t.Fatalf("provider rejection not surfaced: %v", err)
 	}
-	if requests != 1 {
-		t.Fatalf("provider rejection made %d attempts, want 1", requests)
+	if requests.Load() != 1 {
+		t.Fatalf("provider rejection made %d attempts, want 1", requests.Load())
+	}
+}
+
+func TestStructuredOutputCompletedRefusalOnWire(t *testing.T) {
+	const item = `{"id":"msg-1","type":"message","role":"assistant","status":"completed","content":[{"type":"refusal","refusal":"I cannot help with that."}]}`
+	for _, fallback := range []bool{false, true} {
+		t.Run(fmt.Sprintf("item_fallback=%t", fallback), func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "text/event-stream")
+				output := item
+				if fallback {
+					// Codex can supply the item only through output_item.done.
+					_, _ = fmt.Fprintf(w, "data: {\"type\":\"response.output_item.done\",\"output_index\":0,\"item\":%s}\n\n", item)
+					output = ""
+				}
+				_, _ = fmt.Fprintf(w, "data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp-1\",\"status\":\"completed\",\"output\":[%s]}}\n\n", output)
+			}))
+			defer server.Close()
+			adapter := newTestAdapter(t, server.URL)
+			request := validRequest()
+			request.Model.OutputFormat = structuredFormat()
+			got, err := adapter.Respond(t.Context(), request, llm.RequestOptions{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got.Stop != llm.StopRefused || got.Failure != nil || len(got.Output) != 1 {
+				t.Fatalf("response = %#v", got)
+			}
+			want := llm.Item{ProviderID: "msg-1", Type: llm.ItemMessage, Data: llm.Message{Role: llm.RoleAssistant, Text: "I cannot help with that."}}
+			if !reflect.DeepEqual(got.Output[0], want) {
+				t.Fatalf("output = %#v", got.Output)
+			}
+		})
+	}
+}
+
+func TestRefusalStopReasonPreservesOtherTerminalStates(t *testing.T) {
+	for _, test := range []struct {
+		name, status, extra, content, text string
+		stop                               llm.StopReason
+		failed                             bool
+	}{
+		{name: "empty refusal", status: "completed", content: `{"type":"refusal","refusal":""}`, stop: llm.StopRefused},
+		{name: "mixed content", status: "completed", content: `{"type":"output_text","text":"prefix "},{"type":"refusal","refusal":"denied"},{"type":"output_text","text":" suffix"}`, text: "prefix denied suffix", stop: llm.StopRefused},
+		{name: "ordinary text", status: "completed", content: `{"type":"output_text","text":"I cannot help with that."}`, text: "I cannot help with that.", stop: llm.StopComplete},
+		{name: "schema output", status: "completed", content: `{"type":"output_text","text":"{\"approved\":true}"}`, text: `{"approved":true}`, stop: llm.StopComplete},
+		{name: "truncated refusal", status: "incomplete", extra: `,"incomplete_details":{"reason":"max_output_tokens"}`, content: `{"type":"refusal","refusal":"partial"}`, text: "partial", stop: llm.StopMaxOutputTokens},
+		{name: "filtered refusal", status: "incomplete", extra: `,"incomplete_details":{"reason":"content_filter"}`, content: `{"type":"refusal","refusal":"denied"}`, text: "denied", stop: llm.StopRefused},
+		{name: "failed refusal", status: "failed", extra: `,"error":{"code":"server_error","message":"failed"}`, content: `{"type":"refusal","refusal":"denied"}`, text: "denied", failed: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			body := fmt.Sprintf(`{"id":"resp-1","status":%q%s,"output":[{"id":"msg-1","type":"message","role":"assistant","status":"completed","content":[%s]}]}`, test.status, test.extra, test.content)
+			got, err := decodeResponse([]byte(body))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got.Stop != test.stop || (got.Failure != nil) != test.failed || len(got.Output) != 1 {
+				t.Fatalf("response = %#v", got)
+			}
+			if message, ok := got.Output[0].Data.(llm.Message); !ok || message.Text != test.text {
+				t.Fatalf("output = %#v", got.Output)
+			}
+		})
 	}
 }

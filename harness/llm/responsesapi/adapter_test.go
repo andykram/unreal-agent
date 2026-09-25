@@ -238,7 +238,7 @@ func TestResponseKeepsOutputWhenTruncated(t *testing.T) {
 	}
 }
 
-func TestResponseReadsRefusalAsMessageText(t *testing.T) {
+func TestResponseMarksCompletedRefusalAndKeepsMessageText(t *testing.T) {
 	got, err := decodeResponse([]byte(`{
 		"id":"resp-1",
 		"status":"completed",
@@ -246,6 +246,9 @@ func TestResponseReadsRefusalAsMessageText(t *testing.T) {
 	}`))
 	if err != nil {
 		t.Fatalf("decode response: %v", err)
+	}
+	if got.Stop != llm.StopRefused {
+		t.Fatalf("stop = %q, want refused", got.Stop)
 	}
 	want := llm.Message{Role: llm.RoleAssistant, Text: "I cannot help with that."}
 	if len(got.Output) != 1 || !reflect.DeepEqual(got.Output[0].Data, want) {

@@ -87,6 +87,11 @@ type Model struct {
 // Strict asks the provider to enforce its supported JSON Schema subset. A nil
 // Model.OutputFormat preserves unrestricted text output. Refusals and truncated
 // responses still require inspecting Response.Stop before consuming the output.
+// Adapters do not validate returned content against Schema; callers must parse
+// and validate it as required by their application.
+//
+// The caller owns this format and its nested schema values. Treat them as
+// immutable while a builder or request references them.
 type OutputFormat struct {
 	Name   string
 	Schema map[string]any
