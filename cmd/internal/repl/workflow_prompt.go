@@ -9,8 +9,8 @@ import (
 // A snapshot records the effective task prompt, including loaded instruction and
 // skill preambles. It is evidence from execution, never a reconstructed preview.
 type workflowPromptSnapshot struct {
-	StepID, Phase string
-	System, User  string
+	StepID, Phase, ExternalKey string
+	System, User               string
 }
 
 func loadWorkflowPromptSnapshots(directory, runID string, state workflow.State) map[string]workflowPromptSnapshot {

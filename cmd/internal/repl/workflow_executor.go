@@ -247,7 +247,7 @@ func (executor *replWorkflowExecutor) agent(ctx context.Context, request workflo
 	if _, _, err = runtime.Submit(ctx, prompt, false); err != nil {
 		return workflow.ExecutionResult{}, err
 	}
-	snapshot := &workflowPromptSnapshot{StepID: request.Step.ID, Phase: request.Node.Phase, System: runtime.SystemPrompt(), User: prompt}
+	snapshot := &workflowPromptSnapshot{StepID: request.Step.ID, Phase: request.Node.Phase, ExternalKey: request.ExternalKey, System: runtime.SystemPrompt(), User: prompt}
 	if request.ExternalKey != "" {
 		receipt, readErr := readWorkflowReceipt(executor.directory, request, executor.config.Current())
 		if readErr != nil {

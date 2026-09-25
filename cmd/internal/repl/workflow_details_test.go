@@ -88,7 +88,10 @@ func TestWorkflowFullPromptShowsCapturedMessagesWithoutPreviewTruncation(t *test
 	model := workflowViewFixture(t)
 	panel := model.workflow
 	panel.fullPrompt = true
-	panel.prompts = map[string]workflowPromptSnapshot{"review": {System: strings.Repeat("long system instructions\n", 1000) + "SYSTEM_END", User: "resolved inputs and user prompt\nUSER_END"}}
+	node := panel.state["review"]
+	node.ExternalKey = "current-key"
+	panel.state["review"] = node
+	panel.prompts = map[string]workflowPromptSnapshot{"review": {ExternalKey: "current-key", Phase: node.Phase, System: strings.Repeat("long system instructions\n", 1000) + "SYSTEM_END", User: "resolved inputs and user prompt\nUSER_END"}}
 	full := strings.Join(model.workflowDetails(80), "\n")
 	for _, text := range []string{"FULL PROMPT", "Captured for this attempt", "SYSTEM MESSAGE", "USER MESSAGE", "SYSTEM_END", "USER_END"} {
 		if !strings.Contains(full, text) {
@@ -127,5 +130,38 @@ func TestWorkflowFullPromptFallbackAndAuthoredAugmentation(t *testing.T) {
 				t.Fatalf("unsafe full prompt row %q", line)
 			}
 		}
+	}
+}
+
+func TestWorkflowPromptCaptureLabelsAttemptAndLegacyHonestly(t *testing.T) {
+	model := workflowViewFixture(t)
+	panel := model.workflow
+	panel.fullPrompt = true
+	node := panel.state["review"]
+	node.ExternalKey = "repair-2"
+	node.Phase = "repair"
+	panel.state["review"] = node
+	for _, test := range []struct {
+		name, key, phase string
+		current          bool
+	}{
+		{"current", "repair-2", "repair", true},
+		{"previous attempt", "repair-1", "repair", false},
+		{"previous phase", "repair-2", "check", false},
+		{"legacy", "", "repair", false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			panel.prompts = map[string]workflowPromptSnapshot{"review": {ExternalKey: test.key, Phase: test.phase, System: "retained system", User: "retained user"}}
+			content := strings.Join(model.workflowDetails(100), "\n")
+			if strings.Contains(content, "Captured for this attempt") != test.current {
+				t.Fatalf("incorrect capture attribution: %s", content)
+			}
+			if !test.current && !strings.Contains(content, "Last captured prompt") {
+				t.Fatal("old prompt was not labeled")
+			}
+			if !strings.Contains(content, "retained system") || !strings.Contains(content, "retained user") {
+				t.Fatal("historical evidence was discarded")
+			}
+		})
 	}
 }

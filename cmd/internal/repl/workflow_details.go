@@ -80,7 +80,11 @@ func (model *uiModel) workflowDetails(width int) []string {
 	} else if panel.fullPrompt {
 		lines = append(lines, "", model.ink("FULL PROMPT", palette.accent, true))
 		if snapshot, available := panel.prompts[step.ID]; available {
-			lines = append(lines, model.ink("Captured for this attempt · system and user messages", palette.muted, false))
+			label := "Last captured prompt · not verified for the current attempt"
+			if snapshot.ExternalKey != "" && snapshot.ExternalKey == node.ExternalKey && snapshot.Phase == node.Phase {
+				label = "Captured for this attempt · system and user messages"
+			}
+			lines = append(lines, model.ink(label, palette.muted, false))
 			addFull := func(label, text string) {
 				lines = append(lines, "", model.ink(label, palette.lilac, true))
 				if text == "" {
