@@ -86,6 +86,9 @@ func FuzzCoordinatorFaults(f *testing.F) {
 				}
 				callID := fmt.Sprintf("call-%d", index)
 				results[callID] = plan.result
+				if !plan.fail {
+					results[callID] = "Skill file: " + plan.path + "\n\n" + plan.result
+				}
 				wireCalls = append(wireCalls, map[string]any{
 					"type": "function_call", "id": "provider-" + callID, "call_id": callID,
 					"name": tool.SkillUseName, "arguments": string(faultJSON(t, map[string]string{"name": name})),

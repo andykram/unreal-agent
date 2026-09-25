@@ -19,11 +19,13 @@ import (
 func TestRunSelectsToolsFromStartupConfiguration(t *testing.T) {
 	for _, test := range []struct {
 		name       string
+		compact    bool
 		skill      string
 		disallowed []string
 		want       []string
 	}{
 		{name: "no integrations", want: []string{"Bash", "ViewImage"}},
+		{name: "compact skill", compact: true, skill: "---\nname: review\ndescription: Review code.\n---\n", want: []string{"Bash", "ViewImage", "SkillUse"}},
 		{name: "valid skill", skill: "---\nname: review\ndescription: Review code.\n---\n", want: []string{"Bash", "ViewImage", "SkillUse"}},
 		{name: "disallowed SkillUse", skill: "---\nname: review\ndescription: Review code.\n---\n", disallowed: []string{"SkillUse"}, want: []string{"Bash", "ViewImage"}},
 		{name: "disallowed ViewImage", disallowed: []string{"ViewImage"}, want: []string{"Bash"}},
@@ -43,7 +45,7 @@ func TestRunSelectsToolsFromStartupConfiguration(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			input := map[string]any{"prompt": "hello", "disallowed_tools": test.disallowed}
+			input := map[string]any{"prompt": "hello", "disallowed_tools": test.disallowed, "compact_skills": test.compact}
 			encoded, err := json.Marshal(input)
 			if err != nil {
 				t.Fatal(err)
@@ -78,12 +80,15 @@ func TestRunSelectsToolsFromStartupConfiguration(t *testing.T) {
 			}
 			system := request.Input[0].Data.(llm.Message)
 			wantSkills := slices.Contains(test.want, "SkillUse")
+			wantLocation := wantSkills && !test.compact
+			if strings.Contains(system.Text, "<location>") != wantLocation {
+				t.Fatalf("skill locations present = %v, want %v", !wantLocation, wantLocation)
+			}
 			for _, text := range []string{
 				"Use SkillUse",
 				"<available_skills>",
 				"<name>review</name>",
 				"Review code.",
-				filepath.Join(workspace, ".harness", "skills", "review", "SKILL.md"),
 			} {
 				if strings.Contains(system.Text, text) != wantSkills {
 					t.Errorf("system prompt contains %q = %v, want %v", text, !wantSkills, wantSkills)

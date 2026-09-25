@@ -283,7 +283,7 @@ func TestBuilderAppendsSkillsToPreamble(t *testing.T) {
 			Path:        "/skills/documents/SKILL.md",
 		},
 	}
-	current := NewBuilder(skills...)
+	current := NewBuilderWithConfig(Config{CompactSkills: true}, skills...)
 	skills[0].Name = "changed"
 	current.SetSystemPrompt("Be concise.")
 
@@ -294,13 +294,37 @@ func TestBuilderAppendsSkillsToPreamble(t *testing.T) {
 	want := preamble + `
 
 The following skills provide specialized instructions for specific tasks.
-Use SkillUse to load a skill's file when the task matches its description.
-When a skill file references a relative path, resolve it against the skill directory (parent of SKILL.md / dirname of the path) and use that absolute path in tool calls.
+Use SkillUse with {"name":"skill-name"} when a task matches a skill description. Supply the exact indexed name, not a file path. The harness resolves the name and loads the skill.
+The loaded result includes the skill file location. Resolve relative references against that file's parent directory.
 
-<available_skills><skill><name>go-review</name><description>Review &lt;Go&gt; &amp; &#34;tests&#34;</description><location>/skills/reviewer&#39;s/SKILL.md</location></skill><skill><name>documents</name><description>Edit documents</description><location>/skills/documents/SKILL.md</location></skill></available_skills>
+<available_skills><skill><name>go-review</name><description>Review &lt;Go&gt; &amp; &#34;tests&#34;</description></skill><skill><name>documents</name><description>Edit documents</description></skill></available_skills>
 
 Be concise.`
 	if got := result.Request.Input[0].Data.(llm.Message).Text; got != want {
 		t.Fatalf("system prompt = %q, want %q", got, want)
+	}
+}
+
+func TestBuilderSkillLocationsDefaultAndOptIn(t *testing.T) {
+	skill := tool.Skill{Name: "review", Description: "Review code.", Path: "/workspace/a&b/SKILL.md"}
+	for _, compact := range []bool{false, true} {
+		var current Builder
+		if compact {
+			current = NewBuilderWithConfig(Config{CompactSkills: true}, skill)
+		} else {
+			current = NewBuilder(skill)
+		}
+		current.SetSystemPrompt("Custom instructions")
+		result, err := current.Build()
+		if err != nil {
+			t.Fatal(err)
+		}
+		text := result.Request.Input[0].Data.(llm.Message).Text
+		if strings.Contains(text, "<location>/workspace/a&amp;b/SKILL.md</location>") == compact {
+			t.Fatalf("compact=%v: unexpected skill location: %s", compact, text)
+		}
+		if !strings.Contains(text, "<name>review</name>") || !strings.Contains(text, "Custom instructions") {
+			t.Fatalf("compact=%v: lost prompt contents: %s", compact, text)
+		}
 	}
 }

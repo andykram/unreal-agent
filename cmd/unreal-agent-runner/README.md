@@ -57,3 +57,21 @@ docker run --rm -i --user "$(id -u):$(id -g)" \
 ```
 
 Each release also publishes its Git tag (for example, `v0.1.0`) for version pinning.
+
+## Compact skill discovery
+
+Set `"compact_skills": true` in a JSON request to omit skill file paths from the
+initial discovery index. This saves context, especially when many skills have
+long paths. The default is `false`, which keeps paths in the index.
+
+```sh
+unreal-agent-runner '{"prompt":"Review this project.","compact_skills":true}'
+```
+
+Skills still load by registered name in both modes. The `SkillUse` result includes
+the loaded file path so relative references can be resolved. Names, descriptions,
+and loaded skill contents are unchanged. Set the flag again when resuming a
+session; it is request configuration, not a persisted session setting.
+
+Go callers can use `contextbuilder.NewBuilderWithConfig` with
+`contextbuilder.Config{CompactSkills: true}`. `NewBuilder` keeps locations by default.

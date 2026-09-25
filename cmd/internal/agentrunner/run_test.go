@@ -78,7 +78,8 @@ description: Review code.
 			],
 			"system_prompt":"be concise",
 			"model":"gpt-test",
-			"thinking_level":"medium"
+			"thinking_level":"medium",
+			"compact_skills":true
 		}`),
 		&stdout,
 		&stderr,
@@ -103,7 +104,7 @@ description: Review code.
 	}
 	if len(messages) != 3 || messages[0].Role != llm.RoleSystem ||
 		!strings.Contains(messages[0].Text, "<name>review</name>") ||
-		!strings.Contains(messages[0].Text, "<location>"+skillPath+"</location>") ||
+		strings.Contains(messages[0].Text, skillPath) ||
 		!strings.HasSuffix(messages[0].Text, "\n\nbe concise") ||
 		!slices.Equal(messages[1:], wantMessages) {
 		t.Fatalf("messages = %#v, want system preamble plus %#v", messages, wantMessages)
