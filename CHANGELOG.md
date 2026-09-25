@@ -18,3 +18,8 @@ Each pull request adds its entry here. PR links provide stable history across re
 ### Skill loading ([#3](https://github.com/andykram/unreal-agent/pull/3))
 
 - Add opt-in `compact_skills` discovery to save context by omitting skill paths from the index. Paths remain visible by default. Skills load by name and return their location for relative references.
+
+### Provider connections ([#4](https://github.com/andykram/unreal-agent/pull/4))
+
+- Add the `ollama-cloud` provider with API-key authentication while retaining local Ollama support.
+- Add authenticated Codex model-catalog requests using the configured subscription endpoint and credentials.
