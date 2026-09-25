@@ -161,11 +161,11 @@ func TestApproveAndJoinNeverInvokeExecutor(t *testing.T) {
 	if !errors.Is(err, ErrAwaitingApproval) || state["no"].Status != "skipped" {
 		t.Fatalf("approval gate: %+v %v", state, err)
 	}
-	_, state, rev, err = Approve(store, id, rev, "yes")
+	_, _, rev, err = Approve(store, id, rev, "yes")
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, state, rev, err = Next(t.Context(), store, id, rev, nil)
+	_, state, _, err = Next(t.Context(), store, id, rev, nil)
 	if err != nil || state["merge"].Status != "completed" {
 		t.Fatalf("join failed %+v %v", state, err)
 	}
