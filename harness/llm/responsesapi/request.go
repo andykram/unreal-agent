@@ -54,6 +54,27 @@ func requestBody(request llm.Request, promptCacheKey string, extensions map[stri
 	if len(tools) != 0 {
 		params.Tools = &tools
 	}
+	if format := request.Model.OutputFormat; format != nil {
+		if len(format.Name) == 0 || len(format.Name) > 64 {
+			return nil, errors.New("output format name must contain 1 to 64 ASCII letters, digits, underscores, or dashes")
+		}
+		for _, char := range format.Name {
+			if !(char >= 'a' && char <= 'z' || char >= 'A' && char <= 'Z' || char >= '0' && char <= '9' || char == '_' || char == '-') {
+				return nil, fmt.Errorf("invalid output format name %q", format.Name)
+			}
+		}
+		if format.Schema == nil {
+			return nil, errors.New("output format requires a JSON Schema object")
+		}
+		var wireFormat openaiapi.TextResponseFormatConfiguration
+		if err := setUnion(&wireFormat, openaiapi.TextResponseFormatJsonSchema{
+			Name: format.Name, Schema: openaiapi.ResponseFormatJsonSchemaSchema(format.Schema),
+			Strict: &format.Strict, Type: "json_schema",
+		}); err != nil {
+			return nil, fmt.Errorf("encode output format: %w", err)
+		}
+		params.Text = &openaiapi.ResponseTextParam{Format: &wireFormat}
+	}
 	body, err := json.Marshal(params, json.Deterministic(true))
 	if err != nil {
 		return nil, fmt.Errorf("encode response request: %w", err)
