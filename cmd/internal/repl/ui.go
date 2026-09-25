@@ -244,6 +244,9 @@ func (model *uiModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.MouseWheelMsg:
 		model.disarmQuit()
+		if model.powerBar != nil || model.sessionMenu != nil || model.rename != nil {
+			return model, nil
+		}
 		if model.workflow != nil && model.workflow.visible && model.workflow.recovery != nil {
 			delta := 3
 			if value.Button == tea.MouseWheelUp {
@@ -280,6 +283,9 @@ func (model *uiModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		return model, nil
 	case tea.MouseClickMsg:
 		model.disarmQuit()
+		if model.powerBar != nil || model.rename != nil {
+			return model, nil
+		}
 		if command, handled := model.handleSidebarClick(value); handled {
 			return model, command
 		}
@@ -332,14 +338,6 @@ func (model *uiModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case tea.PasteMsg:
 		model.disarmQuit()
-		if model.workflow != nil && model.workflow.visible && model.workflow.recovery != nil {
-			model.pasteWorkflowRecovery(value.Content)
-			return model, nil
-		}
-		if model.workflow != nil && model.workflow.visible && !(model.question != nil && model.showQuestion) {
-			return model, nil
-		}
-		model.disarmQuit()
 		if model.powerBar != nil {
 			model.powerBar.query += strings.NewReplacer("\n", " ", "\r", " ").Replace(value.Content)
 			model.powerBar.selected = 0
@@ -350,6 +348,13 @@ func (model *uiModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if model.rename != nil {
 			return model.updateRenameSession(value)
+		}
+		if model.workflow != nil && model.workflow.visible && model.workflow.recovery != nil {
+			model.pasteWorkflowRecovery(value.Content)
+			return model, nil
+		}
+		if model.workflow != nil && model.workflow.visible && !(model.question != nil && model.showQuestion) {
+			return model, nil
 		}
 		if model.historySearch != nil {
 			model.historySearch.appendQuery(value.Content)
@@ -423,6 +428,12 @@ func (model *uiModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		if model.powerBar != nil {
 			return model.updatePowerBar(value)
 		}
+		if model.sessionMenu != nil {
+			return model.updateSessionMenu(value)
+		}
+		if model.rename != nil {
+			return model.updateRenameSession(value)
+		}
 		if model.workflow != nil && model.workflow.visible && model.workflow.approvalChoice {
 			return model.updateWorkflowApproval(value)
 		}
@@ -451,12 +462,6 @@ func (model *uiModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			return model, tea.Quit
 		}
 
-		if model.sessionMenu != nil {
-			return model.updateSessionMenu(value)
-		}
-		if model.rename != nil {
-			return model.updateRenameSession(value)
-		}
 		if model.workflow != nil && model.workflow.visible {
 			if model.question != nil && model.showQuestion {
 				return model.updateQuestion(value)
@@ -1080,14 +1085,6 @@ func (model *uiModel) viewContent() tea.View {
 	if model.powerBar != nil {
 		return model.powerBarView()
 	}
-	if model.workflow != nil && model.workflow.visible && model.workflow.approvalChoice {
-		return model.workflowApprovalView()
-	}
-	if gate := model.interactionApprovalGate(); gate != nil {
-		if request := gate.Pending(); request != nil {
-			return model.approvalView(request)
-		}
-	}
 	if model.sessionMenu != nil {
 		return model.sessionMenuView()
 	}
@@ -1098,6 +1095,14 @@ func (model *uiModel) viewContent() tea.View {
 		}
 		panel := lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color(model.palette().lilac)).Padding(1, 2).Width(max(10, min(58, model.width-6))).Render(content)
 		return tea.NewView(lipgloss.Place(model.width, model.height, lipgloss.Center, lipgloss.Center, panel))
+	}
+	if model.workflow != nil && model.workflow.visible && model.workflow.approvalChoice {
+		return model.workflowApprovalView()
+	}
+	if gate := model.interactionApprovalGate(); gate != nil {
+		if request := gate.Pending(); request != nil {
+			return model.approvalView(request)
+		}
 	}
 	if model.workflow != nil && model.workflow.visible && !(model.question != nil && model.showQuestion) {
 		return model.workflowView()
