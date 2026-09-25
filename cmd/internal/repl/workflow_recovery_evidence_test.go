@@ -142,3 +142,21 @@ func TestWorkflowEvidencePendingAgentReceiptIsNotCompletion(t *testing.T) {
 		t.Fatalf("pending:%q %#v %v", evidence, candidate, err)
 	}
 }
+
+func TestWorkflowMissingWorktreePreservesReceiptError(t *testing.T) {
+	config := DefaultConfig()
+	executor := &replWorkflowExecutor{directory: t.TempDir(), workspace: "/repo", config: &ConfigStore{active: config}, worktrees: worktrunkWorkflowBackend{run: func(context.Context, string, ...string) ([]byte, error) { return nil, nil }}}
+	request := workflow.ExecutionRequest{RunID: "run", ExternalKey: "key", Step: workflow.Step{Kind: "worktree"}}
+	fingerprint, err := workflowFingerprint(request, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	receipt := &workflowReceipt{ExternalKey: "key", Fingerprint: fingerprint, StartedAt: time.Now(), Error: "creation interrupted"}
+	if err := saveWorkflowReceipt(executor.directory, request, receipt); err != nil {
+		t.Fatal(err)
+	}
+	evidence, candidate, err := probeWorkflowEvidence(t.Context(), executor, request)
+	if err != nil || candidate != nil || !strings.Contains(evidence, "Recorded error: creation interrupted") || !strings.Contains(evidence, "No registered worktree") {
+		t.Fatalf("missing evidence: %q %v", evidence, err)
+	}
+}

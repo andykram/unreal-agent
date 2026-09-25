@@ -144,9 +144,10 @@ Go validates the serialized shape. See [skill tooling](/guides/skill-types/).
 `output` optionally accepts a Pydantic `BaseModel` subclass for a structured response.
 See [OutputModel](#outputmodel) below.
 
-These are references only during authoring and simulation. A future or
-application-supplied agent executor is responsible for resolving registered
-skill names and loading them. This layer does not include a live agent adapter.
+Skill references are metadata during authoring and simulation. During live REPL
+execution, the agent adapter creates a harness runtime, passes it the configured
+skill references, and submits the prompt. The runtime resolves registered skill
+names and loads their instructions.
 This method has no model, effort, access, or timeout parameters.
 
 `inputs` optionally maps names to literal values or output references. References

@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -104,7 +105,11 @@ func (executor *replWorkflowExecutor) executeOperation(ctx context.Context, requ
 			return workflow.ExecutionResult{}, fmt.Errorf("%w: command argv must contain strings", workflow.ErrNotDispatched)
 		}
 	}
-	if err := executor.approve(ctx, strings.Join(args, " ")+"\nWorkspace: "+workspace); err != nil {
+	quoted := make([]string, len(args))
+	for i, arg := range args {
+		quoted[i] = strconv.Quote(arg)
+	}
+	if err := executor.approve(ctx, strings.Join(quoted, " ")+"\nWorkspace: "+strconv.Quote(workspace)); err != nil {
 		return workflow.ExecutionResult{}, err
 	}
 	result, err := runWorkflowCommand(ctx, workspace, args, request.ExternalKey)

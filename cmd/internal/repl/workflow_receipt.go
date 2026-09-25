@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/unreallabsai/unreal-agent/harness/workflow"
@@ -113,89 +114,120 @@ func saveWorkflowReceipt(directory string, request workflow.ExecutionRequest, re
 	return directoryFile.Sync()
 }
 
+// workflowReceiptCleaner keeps one directory stream across bounded maintenance
+// passes. Restarting the REPL restarts this best-effort scan; receipt safety does
+// not depend on scan position. A different state directory closes the old stream.
+type workflowReceiptCleaner struct {
+	mu     sync.Mutex
+	root   string
+	dir    *os.File
+	closed bool
+}
+
+func (cleaner *workflowReceiptCleaner) Close() {
+	cleaner.mu.Lock()
+	defer cleaner.mu.Unlock()
+	cleaner.closed = true
+	if cleaner.dir != nil {
+		cleaner.dir.Close()
+		cleaner.dir = nil
+	}
+}
+
 // cleanupWorkflowReceipts removes only expired terminal evidence for runs already
 // removed by run retention. Unknown, unresolved, failed, and legacy receipts stay.
-func cleanupWorkflowReceipts(directory string, store *workflow.Store, activeRun string, retention time.Duration, batch int) (int, error) {
-	return cleanupWorkflowReceiptFiles(directory, activeRun, retention, batch, func(id string) error {
+func (cleaner *workflowReceiptCleaner) cleanupWorkflowReceipts(directory string, store *workflow.Store, activeRun string, retention time.Duration, batch int) (int, error) {
+	return cleaner.cleanupWorkflowReceiptFiles(directory, activeRun, retention, batch, func(id string) error {
 		_, _, _, err := store.Load(id)
 		return err
 	})
 }
 
-func cleanupWorkflowReceiptFiles(directory, activeRun string, retention time.Duration, batch int, lookup func(string) error) (int, error) {
+func (cleaner *workflowReceiptCleaner) cleanupWorkflowReceiptFiles(directory, activeRun string, retention time.Duration, batch int, lookup func(string) error) (int, error) {
 	if retention <= 0 || batch <= 0 || batch > 1000 {
 		return 0, fmt.Errorf("receipt cleanup requires positive retention and batch size 1..1000")
 	}
-	root := filepath.Join(directory, "execution-receipts")
-	dir, err := os.Open(root)
-	if os.IsNotExist(err) {
+	cleaner.mu.Lock()
+	defer cleaner.mu.Unlock()
+	if cleaner.closed {
 		return 0, nil
 	}
-	if err != nil {
-		return 0, err
+	root := filepath.Join(directory, "execution-receipts")
+	if cleaner.dir != nil && cleaner.root != root {
+		cleaner.dir.Close()
+		cleaner.dir = nil
 	}
-	defer dir.Close()
+	if cleaner.dir == nil {
+		dir, err := os.Open(root)
+		if os.IsNotExist(err) {
+			return 0, nil
+		}
+		if err != nil {
+			return 0, err
+		}
+		cleaner.dir, cleaner.root = dir, root
+	}
+	dir := cleaner.dir
 	cutoff := time.Now().Add(-retention)
 	removed := 0
-	for removed < batch {
-		entries, readErr := dir.ReadDir(100)
-		for _, entry := range entries {
-			if removed == batch {
-				break
-			}
-			if !strings.HasSuffix(entry.Name(), ".json") || entry.Type()&os.ModeSymlink != 0 {
-				continue
-			}
-			info, err := entry.Info()
-			if err != nil {
-				if os.IsNotExist(err) {
-					continue
-				}
-				return removed, err
-			}
-			if !info.Mode().IsRegular() || info.Size() > 8<<20 {
-				continue
-			}
-			filename := filepath.Join(root, entry.Name())
-			data, err := os.ReadFile(filename)
-			if err != nil {
-				if os.IsNotExist(err) {
-					continue
-				}
-				return removed, err
-			}
-			var receipt workflowReceipt
-			if !json.Valid(data) || json.Unmarshal(data, &receipt) != nil {
-				continue
-			}
-			if receipt.RunID == "" || receipt.RunID == activeRun || receipt.ExternalKey == "" || receipt.Fingerprint == "" || receipt.StartedAt.IsZero() || receipt.CompletedAt.IsZero() || !receipt.CompletedAt.Before(cutoff) || receipt.CompletedAt.Before(receipt.StartedAt) || receipt.Result == nil || receipt.Result.ExitCode != 0 || receipt.Error != "" {
-				continue
-			}
-			expected := workflowReceiptPath(directory, workflow.ExecutionRequest{RunID: receipt.RunID, ExternalKey: receipt.ExternalKey})
-			if expected != filename {
-				continue
-			}
-			err = lookup(receipt.RunID)
-			if err == nil {
-				continue
-			}
-			if !errors.Is(err, sql.ErrNoRows) {
-				return removed, fmt.Errorf("check receipt run %s before cleanup: %w", receipt.RunID, err)
-			}
-			if err := os.Remove(filename); err != nil {
-				if os.IsNotExist(err) {
-					continue
-				}
-				return removed, err
-			}
-			removed++
-		}
-		if errors.Is(readErr, io.EOF) {
-			break
-		}
+	// Limit inspected entries, including preserved and malformed receipts.
+	entries, readErr := dir.ReadDir(batch)
+	defer func() {
 		if readErr != nil {
-			return removed, readErr
+			dir.Close()
+			cleaner.dir = nil
 		}
+	}()
+	for _, entry := range entries {
+		if !strings.HasSuffix(entry.Name(), ".json") || entry.Type()&os.ModeSymlink != 0 {
+			continue
+		}
+		info, err := entry.Info()
+		if err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			return removed, err
+		}
+		if !info.Mode().IsRegular() || info.Size() > 8<<20 {
+			continue
+		}
+		filename := filepath.Join(root, entry.Name())
+		data, err := os.ReadFile(filename)
+		if err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			return removed, err
+		}
+		var receipt workflowReceipt
+		if !json.Valid(data) || json.Unmarshal(data, &receipt) != nil {
+			continue
+		}
+		if receipt.RunID == "" || receipt.RunID == activeRun || receipt.ExternalKey == "" || receipt.Fingerprint == "" || receipt.StartedAt.IsZero() || receipt.CompletedAt.IsZero() || !receipt.CompletedAt.Before(cutoff) || receipt.CompletedAt.Before(receipt.StartedAt) || receipt.Result == nil || receipt.Result.ExitCode != 0 || receipt.Error != "" {
+			continue
+		}
+		expected := workflowReceiptPath(directory, workflow.ExecutionRequest{RunID: receipt.RunID, ExternalKey: receipt.ExternalKey})
+		if expected != filename {
+			continue
+		}
+		err = lookup(receipt.RunID)
+		if err == nil {
+			continue
+		}
+		if !errors.Is(err, sql.ErrNoRows) {
+			return removed, fmt.Errorf("check receipt run %s before cleanup: %w", receipt.RunID, err)
+		}
+		if err := os.Remove(filename); err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			return removed, err
+		}
+		removed++
+	}
+	if readErr != nil && !errors.Is(readErr, io.EOF) {
+		return removed, readErr
 	}
 	if removed > 0 {
 		if err := dir.Sync(); err != nil {

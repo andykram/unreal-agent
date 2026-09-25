@@ -127,6 +127,9 @@ func (model *uiModel) workflowGraphView() tea.View {
 			metadata += "Loading workflow"
 		}
 	}
+	if panel.warning != "" {
+		metadata += " · Warning: " + workflowFlat(panel.warning)
+	}
 	if panel.err != "" {
 		metadata = "! " + workflowFlat(panel.err)
 	}

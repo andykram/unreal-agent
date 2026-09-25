@@ -72,6 +72,7 @@ type uiModel struct {
 	plan                    *planReview
 	workflow                *workflowPanel
 	workflows               []*workflowPanel
+	receiptCleaner          *workflowReceiptCleaner
 	setupError              error
 	ctx                     context.Context
 	getenv                  func(string) string

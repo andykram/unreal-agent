@@ -59,9 +59,11 @@ out of ordinary executor inputs. Even the override requires an existing attempt
 and explicit executor and operation names.
 
 Keys identify work; they do not execute or deduplicate an external operation by
-themselves. There are no live adapters yet. When added, dispatch must commit the
-attempt first, derive its external key through this boundary, and pass only that
-key to the adapter. Adapters must honor it and reconcile interrupted requests.
+themselves. The live runner commits dispatch intent before passing the external
+key to the REPL adapter, which records an execution receipt and dispatches commands,
+child agents, or worktree creation. Interrupted dispatches require explicit
+reconciliation. Receipts and stable keys do not guarantee exactly-once external
+effects; commands and external services must implement their own deduplication.
 The runner does not claim exactly-once effects.
 
 ## Retention and disk use
@@ -111,10 +113,13 @@ a repair phase or create a new logical operation. Ensure the prior executor has
 stopped before retrying; revision checks alone do not stop an old external process.
 The run remains paused after reconciliation until resumed by the user.
 
-After run cleanup, a separate receipt pass deletes at most 100 terminal receipts
-older than seven days, and only after confirming their run is absent. Active runs,
+After run cleanup, a separate receipt pass inspects at most 100 directory entries
+and deletes eligible terminal receipts older than seven days, only after
+confirming their run is absent. Active runs,
 existing runs, failed or unresolved receipts, malformed records, and legacy receipts
 without run identity are preserved. SQLite vacuum does not remove receipt files.
+Receipt scans retain their directory position while the REPL is open and wrap
+after reaching the end. Restarting the REPL restarts this best-effort scan.
 This retention policy does not impose a hard disk quota. See
 [recovery controls](/guides/live-workflows/#reconcile-an-interrupted-step).
 

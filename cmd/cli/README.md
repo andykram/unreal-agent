@@ -173,7 +173,9 @@ Completed runtime installations are cached under XDG_CACHE_HOME indefinitely.
 This command executes real work: command subprocesses, child harness agents with
 tools/questions, and Worktrunk-created worktrees. Worktree hooks are disabled;
 put setup commands in the workflow. Every new or resumed live run asks whether
-to approve all its tool operations or approve each one. This run-specific choice
+to approve all direct commands, worktree creation, and child-agent Bash calls, or
+to approve each of those operations individually. Other child-agent tools do not
+pass through this gate. This run-specific choice
 does not change global configuration or bypass explicit workflow approval nodes.
 Plan mode rejects execution. The graph panel
 supports Space to run/pause, N for the next step, A for approval, and Esc to hide and pause.

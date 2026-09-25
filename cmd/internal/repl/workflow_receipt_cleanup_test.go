@@ -14,6 +14,8 @@ import (
 
 func TestWorkflowReceiptCleanupPreservesRecoveryEvidence(t *testing.T) {
 	directory := t.TempDir()
+	cleaner := &workflowReceiptCleaner{}
+	t.Cleanup(cleaner.Close)
 	old := time.Now().Add(-8 * 24 * time.Hour)
 	cases := []string{"expired", "active", "existing", "failed", "nonzero", "pending", "young", "legacy", "malformed"}
 	paths := map[string]string{}
@@ -47,7 +49,7 @@ func TestWorkflowReceiptCleanupPreservesRecoveryEvidence(t *testing.T) {
 			}
 		}
 	}
-	removed, err := cleanupWorkflowReceiptFiles(directory, "active", 7*24*time.Hour, 100, func(id string) error {
+	removed, err := cleaner.cleanupWorkflowReceiptFiles(directory, "active", 7*24*time.Hour, 100, func(id string) error {
 		if id == "existing" {
 			return nil
 		}
@@ -69,6 +71,8 @@ func TestWorkflowReceiptCleanupPreservesRecoveryEvidence(t *testing.T) {
 }
 func TestWorkflowReceiptCleanupCapsDeletesAndStopsOnLookupError(t *testing.T) {
 	directory := t.TempDir()
+	cleaner := &workflowReceiptCleaner{}
+	t.Cleanup(cleaner.Close)
 	old := time.Now().Add(-8 * 24 * time.Hour)
 	for i := 0; i < 3; i++ {
 		request := workflow.ExecutionRequest{RunID: fmt.Sprint(i), ExternalKey: "key"}
@@ -77,7 +81,7 @@ func TestWorkflowReceiptCleanupCapsDeletesAndStopsOnLookupError(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	removed, err := cleanupWorkflowReceiptFiles(directory, "", 7*24*time.Hour, 1, func(string) error { return sql.ErrNoRows })
+	removed, err := cleaner.cleanupWorkflowReceiptFiles(directory, "", 7*24*time.Hour, 1, func(string) error { return sql.ErrNoRows })
 	if err != nil || removed != 1 {
 		t.Fatalf("cap:%d %v", removed, err)
 	}
@@ -86,7 +90,7 @@ func TestWorkflowReceiptCleanupCapsDeletesAndStopsOnLookupError(t *testing.T) {
 		t.Fatalf("remaining:%d %v", len(entries), err)
 	}
 	broken := errors.New("database unavailable")
-	removed, err = cleanupWorkflowReceiptFiles(directory, "", 7*24*time.Hour, 100, func(string) error { return broken })
+	removed, err = cleaner.cleanupWorkflowReceiptFiles(directory, "", 7*24*time.Hour, 100, func(string) error { return broken })
 	if removed != 0 || !errors.Is(err, broken) {
 		t.Fatalf("lookup error:%d %v", removed, err)
 	}
@@ -107,5 +111,46 @@ func TestWorkflowRepairFingerprintPreservesRetryPayload(t *testing.T) {
 	changed, err := workflowFingerprint(request, DefaultConfig())
 	if err != nil || changed == first {
 		t.Fatalf("changed repair payload reused identity:%v", err)
+	}
+}
+
+func TestWorkflowReceiptCleanupBoundsInspectionAndAdvances(t *testing.T) {
+	directory := t.TempDir()
+	cleaner := &workflowReceiptCleaner{}
+	t.Cleanup(cleaner.Close)
+	old := time.Now().Add(-8 * 24 * time.Hour)
+	for i := 0; i < 9; i++ {
+		request := workflow.ExecutionRequest{RunID: fmt.Sprint(i), ExternalKey: "key"}
+		receipt := &workflowReceipt{ExternalKey: "key", Fingerprint: "f", StartedAt: old.Add(-time.Hour), CompletedAt: old, Result: &workflow.ExecutionResult{}}
+		if err := saveWorkflowReceipt(directory, request, receipt); err != nil {
+			t.Fatal(err)
+		}
+	}
+	seen := map[string]bool{}
+	for pass := 0; pass < 5; pass++ {
+		calls := 0
+		removed, err := cleaner.cleanupWorkflowReceiptFiles(directory, "", 7*24*time.Hour, 2, func(id string) error { calls++; seen[id] = true; return nil })
+		if err != nil || removed != 0 || calls > 2 {
+			t.Fatalf("unbounded pass: %d %d %v", removed, calls, err)
+		}
+	}
+	if len(seen) != 9 {
+		t.Fatalf("scan starved later entries: %v", seen)
+	}
+	// Once the runs expire, the next scan must revisit preserved entries.
+	removed := 0
+	for pass := 0; pass < 7; pass++ {
+		count, err := cleaner.cleanupWorkflowReceiptFiles(directory, "", 7*24*time.Hour, 2, func(string) error { return sql.ErrNoRows })
+		if err != nil {
+			t.Fatal(err)
+		}
+		removed += count
+	}
+	if removed != 9 {
+		t.Fatalf("did not wrap and remove expired receipts: %d", removed)
+	}
+	cleaner.Close()
+	if count, err := cleaner.cleanupWorkflowReceiptFiles(directory, "", time.Hour, 2, nil); err != nil || count != 0 {
+		t.Fatal("closed cleaner restarted")
 	}
 }

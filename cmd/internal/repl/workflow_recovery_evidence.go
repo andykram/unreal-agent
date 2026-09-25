@@ -67,7 +67,7 @@ func probeWorkflowEvidence(ctx context.Context, executor *replWorkflowExecutor, 
 		}
 		backend = *value
 	default:
-		return "The configured worktree backend does not expose a read-only evidence probe. Verify its operation externally.", nil, nil
+		return receiptEvidence + "The configured worktree backend does not expose a read-only evidence probe. Verify its operation externally.", nil, nil
 	}
 	if request.ExternalKey == "" || strings.ContainsAny(request.ExternalKey, "\x00\r\n") {
 		return "", nil, fmt.Errorf("worktree evidence requires a valid external operation key")
@@ -89,7 +89,7 @@ func probeWorkflowEvidence(ctx context.Context, executor *replWorkflowExecutor, 
 		return "", nil, err
 	}
 	if workspace == "" {
-		return fmt.Sprintf("No registered worktree matches branch %q. Absence from this listing does not prove that the interrupted operation had no effects.", branch), nil, nil
+		return receiptEvidence + fmt.Sprintf("No registered worktree matches branch %q. Absence from this listing does not prove that the interrupted operation had no effects.", branch), nil, nil
 	}
 	evidence := receiptEvidence + fmt.Sprintf("Registered worktree: %s\nBranch: %s", workspace, branch)
 	base, _ := request.Step.Spec["base"].(string)

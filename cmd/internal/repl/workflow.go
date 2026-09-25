@@ -29,7 +29,7 @@ type workflowPanel struct {
 	revision                             int64
 	selected, top, detailTop, graphWidth int
 	loading, visible, auto               bool
-	err, mode, stage                     string
+	err, warning, mode, stage            string
 	frame                                int
 	rows                                 map[int]int
 	directory                            string
@@ -46,6 +46,7 @@ type workflowResultMsg struct {
 	runID    string
 	revision int64
 	err      error
+	warning  string
 	initial  bool
 }
 type workflowTickMsg struct{ panel *workflowPanel }
@@ -129,6 +130,11 @@ func (model *uiModel) runWorkflow(argument, raw string) (tea.Model, tea.Cmd) {
 	panel.executor = &replWorkflowExecutor{workspace: model.state.Workspace, directory: stateRoot, config: settings, getenv: model.getenv, heartbeat: model.heartbeat, worktrees: worktrunkWorkflowBackend{}, notices: make(chan workflowAgentNotice, 16), approvals: &approvalGate{config: settings, ctx: model.ctx, workflow: true}}
 	model.registerWorkflowPanel(panel)
 	openedRunIDs := model.workflowRunIDs()
+	if model.receiptCleaner == nil {
+		model.receiptCleaner = &workflowReceiptCleaner{}
+		context.AfterFunc(model.ctx, model.receiptCleaner.Close)
+	}
+	receiptCleaner := model.receiptCleaner
 	model.draft.Clear()
 	model.completion = nil
 	return model, tea.Batch(workflowTick(panel), func() tea.Msg {
@@ -195,14 +201,24 @@ func (model *uiModel) runWorkflow(argument, raw string) (tea.Model, tea.Cmd) {
 		}
 		if result.err == nil {
 			result.prompts = loadWorkflowPromptSnapshots(stateRoot, result.runID, result.state)
-			_, result.err = store.Cleanup(7*24*time.Hour, 100, append(openedRunIDs, result.runID)...)
-			if result.err == nil {
-				_, result.err = cleanupWorkflowReceipts(stateRoot, store, result.runID, 7*24*time.Hour, 100)
-			}
+			result.warning = cleanupWorkflowRetention(store, receiptCleaner, stateRoot, result.runID, openedRunIDs)
 		}
 		return result
 	})
 }
+
+// Retention is best-effort maintenance, separate from creating or restoring a run.
+// If run cleanup fails, preserve receipts rather than deleting recovery evidence.
+func cleanupWorkflowRetention(store *workflow.Store, cleaner *workflowReceiptCleaner, directory, runID string, openedRunIDs []string) string {
+	if _, err := store.Cleanup(7*24*time.Hour, 100, append(openedRunIDs, runID)...); err != nil {
+		return "Workflow retention skipped: " + err.Error()
+	}
+	if _, err := cleaner.cleanupWorkflowReceipts(directory, store, runID, 7*24*time.Hour, 100); err != nil {
+		return "Receipt retention skipped: " + err.Error()
+	}
+	return ""
+}
+
 func workflowCacheDirectory(getenv func(string) string) (string, error) {
 	root := getenv("XDG_CACHE_HOME")
 	if root == "" {
@@ -245,6 +261,9 @@ func (model *uiModel) acceptWorkflowResult(result workflowResultMsg) (tea.Model,
 	}
 	panel := result.panel
 	panel.loading = false
+	if result.initial {
+		panel.warning = result.warning
+	}
 	if result.prompts != nil {
 		panel.prompts = result.prompts
 	}

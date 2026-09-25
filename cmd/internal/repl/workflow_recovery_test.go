@@ -1,6 +1,8 @@
 package repl
 
 import (
+	"errors"
+	"fmt"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -158,5 +160,57 @@ func TestWorkflowRecoveryAutomaticallyOpensForInterruptedResult(t *testing.T) {
 	model.acceptWorkflowResult(workflowResultMsg{panel: panel, graph: panel.graph, state: panel.state, runID: panel.runID, revision: panel.revision})
 	if panel.recovery == nil || panel.recovery.stage != "inspect" || panel.recovery.stepID != "review" || panel.auto || panel.loading {
 		t.Fatal("interrupted checkpoint did not open paused inspector")
+	}
+}
+
+func TestWorkflowRecoveryConflictReloadsWithoutReusingDecision(t *testing.T) {
+	for _, resolved := range []bool{false, true} {
+		t.Run(fmt.Sprint(resolved), func(t *testing.T) {
+			model, store := durableRecoveryFixture(t)
+			panel := model.workflow
+			old := panel.recovery
+			old.action = 3
+			old.stage = "confirm"
+			_ = old.note.Set("old evidence")
+			_ = old.confirm.Set("retry review")
+			var revision int64
+			var err error
+			if resolved {
+				_, _, revision, err = workflow.Reconcile(store, panel.runID, panel.revision, "review", workflow.Reconciliation{Action: "fail", Reason: "another operator verified failure"})
+			} else {
+				revision, err = store.Save(panel.runID, panel.revision, panel.state)
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			command := model.saveWorkflowRecovery()
+			message := command().(workflowReconciledMsg)
+			if !errors.Is(message.result.err, workflow.ErrStaleRunRevision) {
+				t.Fatalf("expected conflict: %v", message.result.err)
+			}
+			model.acceptWorkflowReconciliation(message)
+			if panel.revision != revision || panel.auto || panel.loading {
+				t.Fatal("checkpoint not refreshed and paused")
+			}
+			if resolved {
+				if panel.recovery != nil || panel.state["review"].Status != "failed" {
+					t.Fatal("resolved step remained in recovery")
+				}
+			} else {
+				if panel.recovery == old || panel.recovery.stage != "inspect" || panel.recovery.confirm.Source() != "" || panel.recovery.note.Source() != "" {
+					t.Fatal("old decision survived conflict")
+				}
+				model.acceptWorkflowEvidence(workflowEvidenceMsg{panel: panel, recovery: old, evidence: "obsolete"})
+				if panel.recovery.evidence == "obsolete" {
+					t.Fatal("old evidence survived conflict")
+				}
+				panel.recovery.action = 2
+				_ = panel.recovery.note.Set("fresh verification")
+				message = model.saveWorkflowRecovery()().(workflowReconciledMsg)
+				if message.result.err != nil {
+					t.Fatalf("fresh decision failed: %v", message.result.err)
+				}
+			}
+		})
 	}
 }

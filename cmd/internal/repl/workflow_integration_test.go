@@ -1,7 +1,10 @@
 package repl
 
 import (
+	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -127,5 +130,117 @@ func TestWorkflowRejectedResumeCannotDispatch(t *testing.T) {
 	}
 	if cmd := model.workflowAction("next", ""); cmd != nil {
 		t.Fatal("rejected resume dispatched work")
+	}
+}
+
+func TestWorkflowRetentionFailurePreservesCreatedAndRestoredRuns(t *testing.T) {
+	for _, resume := range []bool{false, true} {
+		for _, failure := range []string{"store", "receipts"} {
+			t.Run(fmt.Sprintf("resume=%t/%s", resume, failure), func(t *testing.T) {
+				model := workflowViewFixture(t)
+				panel := model.workflow
+				panel.executor = &replWorkflowExecutor{notices: make(chan workflowAgentNotice)}
+				directory := t.TempDir()
+				database := filepath.Join(directory, "workflows.sqlite")
+				store, err := workflow.OpenStore(database)
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer store.Close()
+				graph := workflow.Graph{Version: 1, Name: "retention", ExecutionMode: "live", Steps: []workflow.Step{{ID: "seed", Kind: "approval"}, {ID: "join", Kind: "join", Needs: []string{"seed"}}}}
+				state := workflow.State{"seed": {Status: "completed", Outcome: "approved"}}
+				id, revision, err := store.Create(graph, state)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if resume {
+					graph, state, revision, err = store.Load(id)
+					if err != nil {
+						t.Fatal(err)
+					}
+				}
+				if failure == "store" {
+					store.Close()
+				} else {
+					// A file at the receipt directory path reliably fails cleanup even as root.
+					if err := os.WriteFile(filepath.Join(directory, "execution-receipts"), []byte("blocked"), 0600); err != nil {
+						t.Fatal(err)
+					}
+				}
+				cleaner := &workflowReceiptCleaner{}
+				defer cleaner.Close()
+				warning := cleanupWorkflowRetention(store, cleaner, directory, id, nil)
+				if warning == "" {
+					t.Fatal("expected maintenance failure")
+				}
+				panel.runID = ""
+				panel.loading = true
+				model.Update(workflowResultMsg{panel: panel, initial: true, graph: graph, state: state, runID: id, revision: revision, warning: warning})
+				if panel.runID != id || panel.revision != revision || panel.loading || panel.err != "" || !panel.approvalChoice {
+					t.Fatalf("maintenance failure rejected usable run: %#v", panel)
+				}
+				if !strings.Contains(model.workflowView().Content, "Warning:") {
+					t.Fatal("cleanup warning is invisible")
+				}
+				model.Update(workflowResultMsg{panel: panel, graph: graph, state: state, runID: id, revision: revision})
+				if panel.warning != warning {
+					t.Fatal("subsequent progress erased cleanup warning")
+				}
+				verify, err := workflow.OpenStore(database)
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer verify.Close()
+				if _, _, _, err := verify.Load(id); err != nil {
+					t.Fatal("run no longer resumable:", err)
+				}
+			})
+		}
+	}
+}
+
+func TestWorkflowResumeContinuesAfterReceiptCleanupFailure(t *testing.T) {
+	root := t.TempDir()
+	getenv := testEnv(root, "")
+	directory, err := workflowStateDirectory(getenv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	store, err := workflow.OpenStore(filepath.Join(directory, "workflows.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	config := DefaultConfig()
+	encoded, err := json.Marshal(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	graph := workflow.Graph{Version: 1, Name: "resume", ExecutionMode: "live", Workspace: root, ExecutionConfig: encoded, Steps: []workflow.Step{{ID: "seed", Kind: "approval"}, {ID: "join", Kind: "join", Needs: []string{"seed"}}}}
+	id, _, err := store.Create(graph, workflow.State{"seed": {Status: "completed", Outcome: "approved"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(directory, "execution-receipts"), []byte("blocked"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	model := &uiModel{ctx: t.Context(), state: &SessionState{Workspace: root}, config: &ConfigStore{active: config}, getenv: getenv}
+	_, cmd := model.runWorkflow("resume "+id, "/workflow resume "+id)
+	if cmd == nil {
+		t.Fatal("resume did not start")
+	}
+	defer model.receiptCleaner.Close()
+	found := false
+	for _, part := range cmd().(tea.BatchMsg) {
+		if result, ok := part().(workflowResultMsg); ok {
+			found = true
+			if result.err != nil || !strings.Contains(result.warning, "Receipt retention skipped") {
+				t.Fatalf("resume result: %#v", result)
+			}
+			model.Update(result)
+		}
+	}
+	if !found || model.workflow.runID != id || !model.workflow.approvalChoice || model.workflow.err != "" {
+		t.Fatal("cleanup prevented resume")
 	}
 }

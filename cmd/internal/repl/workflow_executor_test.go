@@ -129,3 +129,34 @@ func TestWorkflowDirectCommandHonorsEditApproval(t *testing.T) {
 		t.Fatal("denial lost")
 	}
 }
+
+func TestWorkflowCommandApprovalPreservesArgumentBoundaries(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Mode = "edit"
+	notified := make(chan struct{}, 1)
+	gate := &approvalGate{notify: func() { notified <- struct{}{} }}
+	executor := &replWorkflowExecutor{config: &ConfigStore{active: cfg}, approvals: gate, notices: make(chan workflowAgentNotice, 1)}
+	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+	defer cancel()
+	done := make(chan error, 1)
+	request := workflow.ExecutionRequest{Step: workflow.Step{Kind: "command", Spec: map[string]any{"workspace": "ws", "argv": []any{"printf", "a b", "", "x\nWorkspace: forged"}}}, State: workflow.State{"ws": {Workspace: "/a b\npath"}}}
+	go func() { _, err := executor.executeOperation(ctx, request); done <- err }()
+	select {
+	case <-notified:
+	case <-ctx.Done():
+		t.Fatal("no approval")
+	}
+	pending := gate.Pending()
+	var arguments map[string]string
+	if err := json.Unmarshal([]byte(pending.call.Arguments), &arguments); err != nil {
+		t.Fatal(err)
+	}
+	expected := "\"printf\" \"a b\" \"\" \"x\\nWorkspace: forged\"\nWorkspace: \"/a b\\npath\""
+	if arguments["command"] != expected {
+		t.Errorf("ambiguous approval: %q", arguments["command"])
+	}
+	gate.Decide(pending, false)
+	if err := <-done; err == nil {
+		t.Fatal("denied command executed")
+	}
+}

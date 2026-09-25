@@ -28,8 +28,10 @@ resolves its path from the current working directory.
 ```
 
 Bare `/workflow` opens the previous workflow panel, or starts workflow completion
-when no panel exists. Before starting, choose A to approve all tool operations
-for this workflow run or Y to approve each operation. Resume asks again. This
+when no panel exists. Before starting, choose A to approve all direct commands,
+worktree creation, and child-agent Bash calls for this run, or Y to approve each
+of those operations individually. Other child-agent tools do not pass through
+this gate. Resume asks again. This
 choice does not change global configuration, and explicit workflow approval nodes
 still stop. Plan mode remains blocked. After the choice, execution advances
 automatically and sequentially, even when the graph permits concurrent work.
@@ -166,7 +168,9 @@ effects or deduplication contract. Reusing a key cannot make a non-idempotent
 external service safe. The run remains paused after recovery; press N or Space to
 continue when ready.
 
-Execution receipts are separate evidence files. After run cleanup, up to 100
-terminal receipts older than seven days are removed only when their run is absent.
+Execution receipts are separate evidence files. After run cleanup, each pass
+inspects at most 100 directory entries and removes terminal receipts older than
+seven days only when their run is absent. Successive passes continue through the
+directory while the REPL is open; restarting the REPL restarts the scan.
 Active, unresolved, failed, malformed, and legacy receipts without run identity
 are preserved. This policy is not a hard disk quota.

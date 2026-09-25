@@ -3,7 +3,7 @@
 Throwaway experiment: can real CPython author a workflow graph inside a Go
 application built with `CGO_ENABLED=0`, and can Go visualize its dependencies?
 
-From the cli-repl worktree:
+From the repository root:
 
 ```sh
 make workflow-prototype

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -228,6 +229,15 @@ func (model *uiModel) saveWorkflowRecovery() tea.Cmd {
 		}
 		defer store.Close()
 		result.graph, result.state, result.revision, result.err = workflow.Reconcile(store, runID, revision, recovery.stepID, decision)
+		if errors.Is(result.err, workflow.ErrStaleRunRevision) {
+			graph, state, revision, err := store.Load(runID)
+			if err != nil {
+				result.err = fmt.Errorf("%w; reload failed: %v", result.err, err)
+				result.state = nil
+			} else {
+				result.graph, result.state, result.revision = graph, state, revision
+			}
+		}
 		return workflowReconciledMsg{panel, recovery, result, decision.Action}
 	}
 }
@@ -240,6 +250,21 @@ func (model *uiModel) acceptWorkflowReconciliation(message workflowReconciledMsg
 	panel.stage = ""
 	if message.result.err != nil {
 		message.recovery.err = message.result.err.Error()
+		if errors.Is(message.result.err, workflow.ErrStaleRunRevision) && message.result.state != nil {
+			panel.graph, panel.state, panel.revision = message.result.graph, message.result.state, message.result.revision
+			if message.recovery.cancel != nil {
+				message.recovery.cancel()
+			}
+			panel.auto = false
+			node := panel.state[message.recovery.stepID]
+			if node.Status != "running" || !node.DispatchStarted {
+				panel.recovery = nil
+				panel.err = "Checkpoint changed and was reloaded. This step no longer needs recovery."
+			} else {
+				// A new inspector invalidates in-flight evidence and the old confirmation.
+				panel.recovery = &workflowRecovery{stepID: message.recovery.stepID, stage: "inspect", err: "Checkpoint changed and was reloaded. Check the evidence and review a new decision."}
+			}
+		}
 		return model, nil
 	}
 	panel.graph, panel.state, panel.revision = message.result.graph, message.result.state, message.result.revision
