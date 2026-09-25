@@ -10,20 +10,21 @@ Work from the repository checkout containing this skill. Verify the current impl
 ## Establish the boundary
 
 The shared engine and SQLite store live in `harness/workflow`. The separate
-`cmd/workflow-prototype` module simulates work. Applications can implement the
-generic executor interface; concrete adapters are not included. Workflow storage
-does not replace the harness's local-file session store. Resume restores the saved graph and execution
+`cmd/workflow-prototype` module simulates work; REPL `/workflow` executes real
+operations through adapters. Workflow storage does not replace the harness's
+local-file child-session store. Resume restores the saved graph and execution
 mode without rerunning Python; live and simulator runs cannot cross modes.
 
 Read the relevant implementation before changing it:
 
 - [execution.go](../../../harness/workflow/execution.go): live intent commits, dispatch, result persistence, approval, and interrupted-operation rejection.
+- [REPL workflow control](../../../cmd/internal/repl/workflow.go): resume and graph controls.
 - [simulator main](../../../cmd/workflow-prototype/main.go): simulation checkpoint ordering and cleanup callers.
 - [persistence.go](../../../harness/workflow/persistence.go): transactions, revisions, schema ownership, retention.
 - [execution_keys.go](../../../harness/workflow/execution_keys.go): internal identity and the external key boundary.
 - [storage contract](../../../cmd/workflow-prototype/docs/src/content/docs/explanation/storage.md): current guarantees and limits.
 
-For Python graph changes, use [workflow-library](../workflow-library/SKILL.md).
+For production recovery changes, also use [harness-engineering](../harness-engineering/SKILL.md). For Python graph changes, use [workflow-library](../workflow-library/SKILL.md).
 
 ## Preserve recovery semantics
 
@@ -44,24 +45,49 @@ Internal `IdempotencyKey` and `AttemptKey` identify checkpoint work. External ad
 - Commit the attempt before dispatch. On recovery, reconcile external work before resubmitting it. An external success followed by a local crash is the critical ambiguity.
 - The key helper checks identity presence, not proof of commit. Live `Next`
   commits before dispatch. An unresolved dispatched node returns
-  `ErrReconciliationRequired`. Callers must verify evidence before using `Reconcile`, which requires a reason
-  and preserves an audit history. Retry preserves keys and inputs. Preserve this
-  fail-closed automatic boundary.
+  `ErrReconciliationRequired`. The REPL recovery panel can reconcile it only after
+  a reason and explicit confirmation. Retry preserves keys/inputs and requires
+  the exact step-specific phrase. Preserve this fail-closed automatic boundary.
 - Verify the remote service's deduplication lifetime and lookup behavior. If a result is ambiguous and that protection has expired or is absent, reconcile or stop instead of blindly retrying. Local cleanup must preserve information needed for that reconciliation.
 
 Keys and revision checks alone do not provide exactly-once effects or execution leases. State precisely what a newly integrated executor actually honors.
+
+## Reconcile evidence without replay
+
+Read [receipt storage](../../../cmd/internal/repl/workflow_receipt.go),
+[evidence probing](../../../cmd/internal/repl/workflow_recovery_evidence.go), and
+[recovery UI](../../../cmd/internal/repl/workflow_recovery.go) before changing recovery.
+Receipt identity includes the request fingerprint and executor configuration.
+Repair fingerprints and dispatched prompts must use the same stable inputs;
+reconciliation diagnostics must not change a retried payload under an existing key.
+Captured prompt snapshots describe the executed attempt. Preserve them through
+receipt writes and resume; missing legacy snapshots remain labeled previews.
+A completed matching receipt or verified clean worktree can suggest a result,
+never auto-commit it. Pending commands remain ambiguous; mapped agent sessions
+still need result verification. Probes must not execute commands or provision work.
+
+Keep result-envelope/schema validation, required reasons, explicit confirmation,
+and persisted audit records. Retry must remain paused afterward and keep its
+attempt identity and resolved inputs. Establish that the prior executor stopped
+before redispatch. Receipt cleanup is separate from SQLite vacuum. Delete only expired terminal
+receipts whose run is absent, preserving active, failed, unresolved, malformed,
+and legacy records. Keep cleanup batches bounded.
+
+For multi-run UI ownership and permission routing, read the
+[workflow UI reference](../repl-engineering/references/workflow-ui.md) before changing
+those paths. A selected panel is not the complete set of live runs.
 
 ## Keep storage portable and bounded
 
 Preserve `CGO_ENABLED=0`. Current persistence uses `modernc.org/sqlite`, WAL, FULL synchronous commits, immediate transactions, and per-connection busy timeout. Check driver behavior before changing these settings.
 
-Cleanup must exclude every open run, including the active resume target, and retain failed, blocked, and waiting runs. Only fully completed/skipped runs become retention candidates. Re-saving completion must not extend its original retention timestamp. Bound deletion and vacuum work; do not call retention a hard disk quota. Enable incremental vacuum before creating tables.
+Cleanup must exclude every open run, including background panels and the active resume target, and retain failed, blocked, and waiting runs. Only fully completed/skipped runs become retention candidates. Re-saving completion must not extend its original retention timestamp. Bound deletion and vacuum work; do not call retention a hard disk quota. Enable incremental vacuum before creating tables.
 
 Keep database ownership/version checks and private file permissions. Report snapshot costs as proportional to accumulated state size until measured. Do not generalize startup or rendering timings into database performance claims.
 
 ## Verify the changed contract
 
-Run focused `CGO_ENABLED=0 go test ./harness/workflow` and
+Run focused `CGO_ENABLED=0 go test ./harness/workflow ./cmd/internal/repl` and
 vet from the root. Format changed Go files. Also run cgo-disabled build/vet in
 `cmd/workflow-prototype` when changing its client. Root checks do not cover that
 nested module.

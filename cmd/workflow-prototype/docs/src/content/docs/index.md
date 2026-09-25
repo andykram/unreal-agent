@@ -1,15 +1,16 @@
 ---
 title: Workflow Python API
-description: Author Python workflow graphs, simulate their behavior, and inspect durable simulated execution.
+description: Author Python workflow graphs, simulate their behavior, or execute them through the harness.
 ---
 
 Write Python to describe a workflow. CPython runs inside WASI, exports a JSON
-graph, and exits. The standalone viewer simulates execution. The shared Go engine
-also exposes an executor interface for applications to implement.
+graph, and exits. The standalone viewer simulates execution. The REPL `/workflow`
+command executes graphs with real harness agents, commands, and worktrees.
 
-:::caution[Simulation boundary]
+:::caution[Choose the execution mode]
 The `run.sh` tutorials simulate agents, commands, worktrees, repairs, and approvals.
 Those simulations do not invoke models, execute commands, or create worktrees.
+The [REPL workflow integration](/guides/live-workflows/) performs real operations.
 The API and graph format are experimental.
 :::
 
@@ -27,6 +28,7 @@ flow.export()
 
 ## Start here
 
+- [Run workflows in the REPL](/guides/live-workflows/) for live execution and resumable runs.
 - [Build your first workflow](/tutorials/quickstart/) to run the example through WASI.
 - [Explore branches and repairs](/tutorials/branches-and-repairs/) to choose outcomes in the viewer.
 - [Explore complex workflows](/guides/complex-examples/) for releases, migrations, and investigations.
@@ -38,5 +40,5 @@ flow.export()
 - [Execution model](/explanation/execution-model/) explains dependencies, outcomes, and limits.
 
 The shared implementation lives in `harness/workflow`. The standalone simulator
-lives in `cmd/workflow-prototype`. Concrete execution adapters are not included.
+lives in `cmd/workflow-prototype`; the live client lives in `cmd/internal/repl`.
 The API remains experimental.

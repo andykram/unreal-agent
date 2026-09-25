@@ -54,6 +54,7 @@ Slash commands are completed in the composer. Enter accepts a highlighted comple
 | Command | Action |
 | --- | --- |
 | `/help` | Show commands and keys |
+| `/workflow path.py` / `/workflow resume ID` | Compile, execute, inspect, or resume a Python workflow |
 | `/effort [level]` | Select reasoning effort for the next model request |
 | `/model [provider] [model-id]` | Browse or select a model for the next request |
 | `/provider [provider]` | Complete a provider name, then choose one of its models |
@@ -155,3 +156,59 @@ Set top-level `mode = "all"` for automatic tool calls, `mode = "edit"` to approv
 The command palette supports query filtering, Up/Down, Enter, and Esc. Esc restores the underlying view and draft. Command+K requires a terminal that forwards the Super/Meta key; Ctrl+K works as the portable shortcut. Ctrl+T keeps the visible tool in view when toggling details, including when cards have mixed expanded states.
 
 The command palette lists the current fork family first and highlights the active fork. Use Up/Down and Enter to jump directly. F2 or Ctrl+R renames the highlighted session without switching to it. Saving returns to the refreshed palette with that session selected; Esc cancels and restores the previous query and selection. Opening the palette and pressing F2 immediately renames the active fork.
+
+
+## Python workflows
+
+Type `/workflow` and press Tab to insert `/workflow ` and open file completion.
+Suggestions include Python workflows in `.agents/workflows`, `workflows`, and the
+current working directory. Tab on a directory continues completion inside it.
+Use `/workflow workflows/review.py`, an absolute path, or a path containing spaces.
+The optional `/workflow:workflows/review.py` form resolves its path from the current
+working directory. Bare `/workflow` opens the last graph or workflow completion.
+The first compilation installs the checksum-pinned WASI runtime on demand using
+Go. No host Python, Go toolchain, curl, or C compiler is needed by the built REPL.
+Completed runtime installations are cached under XDG_CACHE_HOME indefinitely.
+
+This command executes real work: command subprocesses, child harness agents with
+tools/questions, and Worktrunk-created worktrees. Worktree hooks are disabled;
+put setup commands in the workflow. Every new or resumed live run asks whether
+to approve all its tool operations or approve each one. This run-specific choice
+does not change global configuration or bypass explicit workflow approval nodes.
+Plan mode rejects execution. The graph panel
+supports Space to run/pause, N for the next step, A for approval, and Esc to hide and pause.
+Steps execute sequentially within each run; separate workflows can run concurrently.
+Each run pauses for approvals or errors. D toggles readable step details and raw
+debugging data. P shows the captured full system and user prompts, including loaded
+instructions and expanded workflow inputs. Captured prompts are saved with execution
+receipts for resume; older runs without snapshots show an authored preview.
+Approval choices support mouse clicks and uppercase or lowercase shortcuts.
+
+Agent steps and reusable `Agent` definitions accept `system_prompt_append="..."`.
+Repeat checks accept `repair_system_prompt_append="..."` for their repair agent.
+These append to the configured system prompt and loaded instructions.
+
+Each opened workflow has its own RHS thread and command-palette entry. Names and
+run IDs distinguish runs of the same workflow. Switching between workflows or a
+conversation preserves each run's state and automatic advancement. Threads show
+when approval or an answer is needed. Persisted runs can be reopened with
+`/workflow resume ID`.
+
+`/workflow resume ID` restores saved progress without compilation or runtime
+installation. Workflow state lives at `$XDG_STATE_HOME/unreal-agent/workflows`,
+falling back to `~/.local/state/unreal-agent/workflows`. Completed steps are reused.
+An interrupted dispatched step requires reconciliation and is not automatically
+retried. Press R on the interrupted step to inspect evidence and record a verified
+result, mark failure, or explicitly allow retry. Recovery opens automatically on
+interrupted resume. Every change requires a reason and confirmation; retry requires
+`retry STEP_ID`. The run stays paused afterward. Ensure the old executor stopped
+before retrying. Matching saved receipts and verified worktrees suggest results
+but never commit them automatically. Terminal receipts older than seven days are cleaned in batches only after their
+run is absent; unresolved and failed evidence is preserved.
+Simulation runs cannot be resumed
+as live runs. Commands receive `UNREAL_WORKFLOW_IDEMPOTENCY_KEY`; adapters must
+honor it to deduplicate external effects.
+
+See the [workflow guide](../workflow-prototype/docs/src/content/docs/guides/live-workflows.md)
+for authoring and execution details. The standalone `cmd/workflow-prototype/run.sh`
+remains a simulator; its example command paths are not necessarily executable.
