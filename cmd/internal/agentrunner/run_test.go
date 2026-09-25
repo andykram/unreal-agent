@@ -78,7 +78,8 @@ description: Review code.
 			],
 			"system_prompt":"be concise",
 			"model":"gpt-test",
-			"thinking_level":"medium"
+			"thinking_level":"medium",
+			"compact_skills":true
 		}`),
 		&stdout,
 		&stderr,

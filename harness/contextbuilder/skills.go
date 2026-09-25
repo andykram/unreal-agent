@@ -21,9 +21,10 @@ type availableSkills struct {
 type promptSkill struct {
 	Name        string `xml:"name"`
 	Description string `xml:"description"`
+	Location    string `xml:"location,omitempty"`
 }
 
-func formatSkillsForPrompt(skills []tool.Skill) string {
+func formatSkillsForPrompt(skills []tool.Skill, compact bool) string {
 	if len(skills) == 0 {
 		return ""
 	}
@@ -33,6 +34,9 @@ func formatSkillsForPrompt(skills []tool.Skill) string {
 		promptSkills[index] = promptSkill{
 			Name:        skill.Name,
 			Description: skill.Description,
+		}
+		if !compact {
+			promptSkills[index].Location = skill.Path
 		}
 	}
 	encoded, err := xml.Marshal(availableSkills{Skills: promptSkills})

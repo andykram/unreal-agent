@@ -283,7 +283,7 @@ func TestBuilderAppendsSkillsToPreamble(t *testing.T) {
 			Path:        "/skills/documents/SKILL.md",
 		},
 	}
-	current := NewBuilder(skills...)
+	current := NewBuilderWithConfig(Config{CompactSkills: true}, skills...)
 	skills[0].Name = "changed"
 	current.SetSystemPrompt("Be concise.")
 
@@ -302,5 +302,29 @@ The loaded result includes the skill file location. Resolve relative references 
 Be concise.`
 	if got := result.Request.Input[0].Data.(llm.Message).Text; got != want {
 		t.Fatalf("system prompt = %q, want %q", got, want)
+	}
+}
+
+func TestBuilderSkillLocationsDefaultAndOptIn(t *testing.T) {
+	skill := tool.Skill{Name: "review", Description: "Review code.", Path: "/workspace/a&b/SKILL.md"}
+	for _, compact := range []bool{false, true} {
+		var current Builder
+		if compact {
+			current = NewBuilderWithConfig(Config{CompactSkills: true}, skill)
+		} else {
+			current = NewBuilder(skill)
+		}
+		current.SetSystemPrompt("Custom instructions")
+		result, err := current.Build()
+		if err != nil {
+			t.Fatal(err)
+		}
+		text := result.Request.Input[0].Data.(llm.Message).Text
+		if strings.Contains(text, "<location>/workspace/a&amp;b/SKILL.md</location>") == compact {
+			t.Fatalf("compact=%v: unexpected skill location: %s", compact, text)
+		}
+		if !strings.Contains(text, "<name>review</name>") || !strings.Contains(text, "Custom instructions") {
+			t.Fatalf("compact=%v: lost prompt contents: %s", compact, text)
+		}
 	}
 }

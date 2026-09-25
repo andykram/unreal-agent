@@ -30,9 +30,20 @@ type builder struct {
 
 var _ Builder = (*builder)(nil)
 
+// Config controls optional context compaction.
+type Config struct {
+	// CompactSkills omits skill paths from discovery to save context.
+	// SkillUse still returns the loaded skill's path for relative references.
+	CompactSkills bool
+}
+
 func NewBuilder(skills ...tool.Skill) Builder {
+	return NewBuilderWithConfig(Config{}, skills...)
+}
+
+func NewBuilderWithConfig(config Config, skills ...tool.Skill) Builder {
 	currentPreamble := preamble
-	if skillPrompt := formatSkillsForPrompt(skills); skillPrompt != "" {
+	if skillPrompt := formatSkillsForPrompt(skills, config.CompactSkills); skillPrompt != "" {
 		currentPreamble += "\n\n" + skillPrompt
 	}
 	current := &builder{preamble: currentPreamble, committedPrefix: make([]llm.Item, 1)}

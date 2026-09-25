@@ -17,4 +17,4 @@ Each pull request adds its entry here. PR links provide stable history across re
 
 ### Skill loading ([#3](https://github.com/andykram/unreal-agent/pull/3))
 
-- Align skill discovery instructions with loading skills by name, letting the harness resolve their locations.
+- Add opt-in `compact_skills` discovery to save context by omitting skill paths from the index. Paths remain visible by default. Skills load by name and return their location for relative references.
