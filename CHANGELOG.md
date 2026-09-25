@@ -23,3 +23,7 @@ Each pull request adds its entry here. PR links provide stable history across re
 
 - Add the `ollama-cloud` provider with API-key authentication while retaining local Ollama support.
 - Add authenticated Codex model-catalog requests using the configured subscription endpoint and credentials.
+
+### Structured model outputs ([#5](https://github.com/andykram/unreal-agent/pull/5))
+
+- Add JSON Schema output formats to model requests and encode native structured outputs for Responses API providers.
