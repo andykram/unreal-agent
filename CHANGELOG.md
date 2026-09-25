@@ -1,0 +1,16 @@
+# Changelog
+
+User-visible changes are listed under Unreleased until they are included in a tagged release.
+Each pull request adds its entry here. PR links provide stable history across rebases and squash merges.
+
+## Unreleased
+
+### CI and review foundation ([#10](https://github.com/andykram/unreal-agent/pull/10))
+
+- Add Linux and macOS validation, golangci-lint v2, formatting and vet checks, race tests, fuzzing, and builds without cgo.
+- Check Harbor, Docker, Python/WASI workflows, generated skill types, and developer docs when those components are present.
+- Configure CodeRabbit reviews for stacked pull requests.
+
+### Session fork recovery ([#2](https://github.com/andykram/unreal-agent/pull/2))
+
+- Preserve completed tool results when forking and restoring sessions, so resumed model requests retain matching tool calls and outputs.
