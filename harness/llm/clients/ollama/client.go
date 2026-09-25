@@ -12,6 +12,7 @@ const BaseURL = "http://localhost:11434/v1"
 
 type Config struct {
 	BaseURL     string
+	APIKey      string
 	MaxAttempts *int
 }
 
@@ -25,10 +26,14 @@ func NewClient(config Config) (*Client, error) {
 	if baseURL == "" {
 		baseURL = BaseURL
 	}
+	headers := map[string][]string{"Content-Type": {"application/json"}}
+	if config.APIKey != "" {
+		headers["Authorization"] = []string{"Bearer " + config.APIKey}
+	}
 	remote := primitives.NewRemoteClient()
 	adapter, err := responsesapi.NewAdapter(remote, responsesapi.Config{
 		Endpoint:    baseURL + "/responses",
-		Headers:     map[string][]string{"Content-Type": {"application/json"}},
+		Headers:     headers,
 		MaxAttempts: config.MaxAttempts,
 	})
 	if err != nil {
