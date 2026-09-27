@@ -39,8 +39,38 @@ unreal-agent-runner < request.json
 ```
 
 OpenAI is the default provider. Set `UNREAL_HARNESS_LLM_PROVIDER` to `openai`,
-`openai-codex`, `openrouter`, `fireworks`, or `ollama`, and
+`openai-codex`, `openrouter`, `fireworks`, `ollama`, or `ollama-cloud`, and
 `UNREAL_HARNESS_LLM_MODEL` to choose a model.
+
+To use a Codex subscription, sign in with the Codex CLI, then select its
+provider. The runner reads the existing ChatGPT login from
+`${CODEX_HOME:-$HOME/.codex}/auth.json` and defaults to `gpt-6-sol`:
+
+```sh
+codex login
+UNREAL_HARNESS_LLM_PROVIDER=openai-codex \
+  unreal-agent-runner -p 'Summarize this project.'
+```
+
+You can set `OPENAI_CODEX_AUTH_FILE` to another Codex auth file, or supply both
+`OPENAI_CODEX_ACCESS_TOKEN` and `OPENAI_CODEX_ACCOUNT_ID`. The runner reads the
+credentials when it starts; after a token expires, sign in again and restart it.
+This provider uses the Codex subscription, not `OPENAI_API_KEY`.
+
+To use hosted Ollama, set `OLLAMA_API_KEY` and an explicit model available to
+your Ollama account (`ollama-cloud` has no default model):
+
+```sh
+export OLLAMA_API_KEY="..."
+UNREAL_HARNESS_LLM_PROVIDER=ollama-cloud \
+  UNREAL_HARNESS_LLM_MODEL='<your-cloud-model>' \
+  unreal-agent-runner -p 'Summarize this project.'
+```
+
+The default endpoint is `https://ollama.com/v1`. Override it with
+`UNREAL_HARNESS_LLM_BASE_URL` if needed; authenticated endpoints require HTTPS,
+except for loopback HTTP. Authenticated requests refuse redirects. For a local
+Ollama server without authentication, select `ollama` instead.
 
 Run `unreal-agent-runner -h` for options and the JSON request fields.
 

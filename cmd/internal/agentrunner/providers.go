@@ -18,6 +18,14 @@ func DefaultProviders() []Provider {
 			},
 		},
 		{
+			Name:              "ollama-cloud",
+			BaseURL:           "https://ollama.com/v1",
+			APIKeyEnvironment: "OLLAMA_API_KEY",
+			NewClient: func(apiKey, baseURL string, maxAttempts int, _ func(string) string) (Client, error) {
+				return ollama.NewClient(ollama.Config{BaseURL: baseURL, APIKey: apiKey, MaxAttempts: &maxAttempts})
+			},
+		},
+		{
 			Name:              "openai",
 			BaseURL:           "https://api.openai.com/v1",
 			DefaultModel:      "gpt-6-astra",
@@ -27,8 +35,9 @@ func DefaultProviders() []Provider {
 			},
 		},
 		{
-			Name:    "openai-codex",
-			BaseURL: openaicodex.BaseURL,
+			Name:         "openai-codex",
+			BaseURL:      openaicodex.BaseURL,
+			DefaultModel: "gpt-6-sol",
 			NewClient: func(_, baseURL string, maxAttempts int, getenv func(string) string) (Client, error) {
 				config, err := openaicodex.EnvironmentConfig(getenv)
 				if err != nil {
