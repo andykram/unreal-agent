@@ -2,6 +2,8 @@
 
 CI runs for every pull request, including stacked PRs whose base is another feature branch. Pushes to `main` and manual dispatches also run CI. A newer run for the same pull request cancels older work. Feature branches use the pull request trigger to avoid duplicate push and PR runs.
 
+CodeQL scans Go and Python on every pull request, pushes to `main`, and weekly. Analysis results are uploaded to GitHub code scanning.
+
 Required validation includes:
 
 - Linux and macOS: root race tests, `go vet`, a failing `gofmt` check, runner builds, and a no-cgo build.
