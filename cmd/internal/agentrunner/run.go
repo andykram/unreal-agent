@@ -63,6 +63,7 @@ type Provider struct {
 }
 
 type Request struct {
+	CompactSkills          bool             `json:"compact_skills"`
 	Messages               []RequestMessage `json:"messages"`
 	Prompt                 *string          `json:"prompt"`
 	SystemPrompt           *string          `json:"system_prompt"`
@@ -407,7 +408,7 @@ func Run(
 		return fmt.Errorf("submit stop request: %w", err)
 	}
 
-	builder := contextbuilder.NewBuilder(registry.Skills()...)
+	builder := contextbuilder.NewBuilderWithConfig(contextbuilder.Config{CompactSkills: parsed.CompactSkills}, registry.Skills()...)
 	builder.SetModel(llm.Model{
 		ID:              model,
 		ReasoningEffort: reasoningEffort(parsed.ThinkingLevel),

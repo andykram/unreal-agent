@@ -19,6 +19,8 @@ Request schema (JSON object; unknown fields are rejected):
     Overrides UNREAL_HARNESS_LLM_MAX_ATTEMPTS (default 5); 1 disables retries.
   system_prompt: string (optional)
     Replaces the default system prompt.
+  compact_skills: boolean (optional; default false)
+    Omit skill paths from discovery to save context; loaded skills include their paths.
   thinking_level: "low" | "medium" | "high" | "xhigh" | "max" (optional; default "high")
   session_id: non-empty string (optional)
     Creates or resumes a persisted session.
