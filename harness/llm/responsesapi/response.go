@@ -54,56 +54,69 @@ func response(source openaiapi.Response) (llm.Response, error) {
 		return llm.Response{}, fmt.Errorf("unsupported response status %q", *source.Status)
 	}
 	for index, output := range source.Output {
-		item, included, err := responseOutputItem(output)
+		decoded, err := responseOutputItem(output)
 		if err != nil {
 			return llm.Response{}, fmt.Errorf("output item %d: %w", index, err)
 		}
-		if !included {
+		if !decoded.included {
 			continue
 		}
-		converted.Output = append(converted.Output, item)
+		converted.Output = append(converted.Output, decoded.item)
+		// Preserve failure and truncation statuses; a completed refusal is not
+		// successful schema output, even when the refusal text is empty.
+		if decoded.refused && converted.Stop == llm.StopComplete {
+			converted.Stop = llm.StopRefused
+		}
 	}
 	return converted, nil
 }
 
-func responseOutputItem(source openaiapi.OutputItem) (llm.Item, bool, error) {
+type decodedOutputItem struct {
+	item     llm.Item
+	included bool
+	refused  bool
+}
+
+func responseOutputItem(source openaiapi.OutputItem) (decodedOutputItem, error) {
 	itemType, err := source.Discriminator()
 	if err != nil {
-		return llm.Item{}, false, fmt.Errorf("decode output item type: %w", err)
+		return decodedOutputItem{}, fmt.Errorf("decode output item type: %w", err)
 	}
 
 	switch itemType {
 	case "web_search_call":
-		return llm.Item{}, false, nil
+		return decodedOutputItem{}, nil
 	case "message":
 		message, err := source.AsOutputMessage()
 		if err != nil {
-			return llm.Item{}, false, err
+			return decodedOutputItem{}, err
 		}
 		var text strings.Builder
+		var refused bool
 		for _, content := range message.Content {
 			contentType, err := content.Discriminator()
 			if err != nil {
-				return llm.Item{}, false, fmt.Errorf("decode message content type: %w", err)
+				return decodedOutputItem{}, fmt.Errorf("decode message content type: %w", err)
 			}
 			switch contentType {
 			case "output_text":
 				part, err := content.AsOutputTextContent()
 				if err != nil {
-					return llm.Item{}, false, err
+					return decodedOutputItem{}, err
 				}
 				text.WriteString(part.Text)
 			case "refusal":
 				part, err := content.AsRefusalContent()
 				if err != nil {
-					return llm.Item{}, false, err
+					return decodedOutputItem{}, err
 				}
 				text.WriteString(part.Refusal)
+				refused = true
 			default:
-				return llm.Item{}, false, fmt.Errorf("unsupported message content type %q", contentType)
+				return decodedOutputItem{}, fmt.Errorf("unsupported message content type %q", contentType)
 			}
 		}
-		return llm.Item{
+		return decodedOutputItem{item: llm.Item{
 			ProviderID: message.Id,
 			Type:       llm.ItemMessage,
 			Data: llm.Message{
@@ -111,20 +124,20 @@ func responseOutputItem(source openaiapi.OutputItem) (llm.Item, bool, error) {
 				Text:  text.String(),
 				Phase: dereference(message.Phase),
 			},
-		}, true, nil
+		}, included: true, refused: refused}, nil
 	case "function_call":
 		call, err := source.AsFunctionToolCall()
 		if err != nil {
-			return llm.Item{}, false, err
+			return decodedOutputItem{}, err
 		}
 		if call.Status != nil {
 			switch *call.Status {
 			case openaiapi.FunctionToolCallStatusInProgress,
 				openaiapi.FunctionToolCallStatusIncomplete:
-				return llm.Item{}, false, nil
+				return decodedOutputItem{}, nil
 			}
 		}
-		return llm.Item{
+		return decodedOutputItem{item: llm.Item{
 			ProviderID: dereference(call.Id),
 			Type:       llm.ItemToolCall,
 			Data: llm.ToolCall{
@@ -132,30 +145,30 @@ func responseOutputItem(source openaiapi.OutputItem) (llm.Item, bool, error) {
 				Name:      call.Name,
 				Arguments: call.Arguments,
 			},
-		}, true, nil
+		}, included: true}, nil
 	case "reasoning":
 		reasoning, err := source.AsReasoningItem()
 		if err != nil {
-			return llm.Item{}, false, err
+			return decodedOutputItem{}, err
 		}
 		raw, err := source.MarshalJSON()
 		if err != nil {
-			return llm.Item{}, false, err
+			return decodedOutputItem{}, err
 		}
 		summary := make([]string, len(reasoning.Summary))
 		for index, part := range reasoning.Summary {
 			summary[index] = part.Text
 		}
-		return llm.Item{
+		return decodedOutputItem{item: llm.Item{
 			ProviderID: reasoning.Id,
 			Type:       llm.ItemReasoning,
 			Data: llm.Reasoning{
 				Summary: summary,
 				Raw:     raw,
 			},
-		}, true, nil
+		}, included: true}, nil
 	default:
-		return llm.Item{}, false, fmt.Errorf("unsupported output item type %q", itemType)
+		return decodedOutputItem{}, fmt.Errorf("unsupported output item type %q", itemType)
 	}
 }
 

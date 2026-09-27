@@ -23,3 +23,8 @@ Each pull request adds its entry here. PR links provide stable history across re
 
 - Add the `ollama-cloud` provider with API-key authentication while retaining local Ollama support. Authenticated endpoints require HTTPS (except loopback HTTP) and refuse redirects.
 - Add authenticated Codex model-catalog requests using the configured subscription endpoint and credentials.
+
+### Structured model outputs ([#5](https://github.com/andykram/unreal-agent/pull/5))
+
+- Add JSON Schema output formats to model requests and encode native structured outputs for Responses API providers.
+- Surface completed provider refusals as `StopRefused` while preserving the refusal text, so structured-output consumers can distinguish them from schema output.
