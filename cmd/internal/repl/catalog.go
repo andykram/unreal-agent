@@ -77,7 +77,7 @@ func (catalog *ModelCatalog) ConfiguredProviders() []string {
 			result = append(result, name)
 			continue
 		}
-		if provider.APIKeyEnvironment != "" && (catalog.getenv(provider.APIKeyEnvironment) != "" || catalog.getenv("UNREAL_HARNESS_LLM_API_KEY") != "") {
+		if provider.APIKeyEnvironment != "" && catalog.getenv(provider.APIKeyEnvironment) != "" {
 			result = append(result, name)
 		}
 	}
@@ -197,9 +197,11 @@ func (catalog *ModelCatalog) discover(ctx context.Context, provider string, gene
 	}
 	credential := ""
 	if provider != "ollama" {
-		credential = catalog.getenv("UNREAL_HARNESS_LLM_API_KEY")
-		if credential == "" {
-			credential = catalog.getenv(definition.APIKeyEnvironment)
+		// Match the router's override only for the active provider so discovery
+		// never sends one provider's key to another provider.
+		credential = catalog.getenv(definition.APIKeyEnvironment)
+		if generic := catalog.getenv("UNREAL_HARNESS_LLM_API_KEY"); generic != "" && provider == catalog.config.Current().Model.Provider {
+			credential = generic
 		}
 		if credential == "" {
 			result.Err = fmt.Errorf("set %s for %s model discovery", definition.APIKeyEnvironment, provider)

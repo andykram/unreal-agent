@@ -222,7 +222,7 @@ func (model *uiModel) runResume(argument, _ string) (tea.Model, tea.Cmd) {
 	command, err := model.switchSession(argument)
 	if err != nil {
 		model.message = err.Error()
-		return model, nil
+		return model, command
 	}
 	model.draft.Clear()
 	model.message = "Resumed " + model.state.Current.Name
@@ -253,7 +253,7 @@ func (model *uiModel) runFork(name, _ string) (tea.Model, tea.Cmd) {
 	command, err := model.switchSession(child.SessionID)
 	if err != nil {
 		model.message = err.Error()
-		return model, nil
+		return model, command
 	}
 	model.draft.Clear()
 	model.message = "Forked into " + child.Name
@@ -261,6 +261,9 @@ func (model *uiModel) runFork(name, _ string) (tea.Model, tea.Cmd) {
 }
 
 func completeModelArgument(model *uiModel, argument string) []commandChoice {
+	if model.catalog == nil {
+		return nil
+	}
 	var choices []commandChoice
 	parts := strings.Fields(argument)
 	if len(parts) < 2 && !strings.Contains(argument, " ") {
@@ -385,7 +388,7 @@ func (model *uiModel) runSkills(query, _ string) (tea.Model, tea.Cmd) {
 }
 
 func (model *uiModel) runReloadConfig(_, _ string) (tea.Model, tea.Cmd) {
-	candidate, err := model.config.read()
+	candidate, err := model.config.read(model.config.path)
 	if err != nil {
 		model.message = "Reload failed: " + err.Error()
 		return model, nil

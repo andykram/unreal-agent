@@ -95,7 +95,7 @@ func LoadConfig(getenv func(string) string) (*ConfigStore, error) {
 		return nil, err
 	}
 	store := &ConfigStore{path: path, getenv: getenv}
-	config, err := store.read()
+	config, err := store.read(store.path)
 	if err != nil {
 		return nil, err
 	}
@@ -128,7 +128,7 @@ func cloneConfig(source Config) Config {
 	return copy
 }
 
-func (store *ConfigStore) read() (Config, error) {
+func (store *ConfigStore) read(path string) (Config, error) {
 	k := koanf.New(".")
 	defaults := DefaultConfig()
 	if err := k.Load(confmap.Provider(map[string]any{
@@ -160,22 +160,22 @@ func (store *ConfigStore) read() (Config, error) {
 			return Config{}, err
 		}
 	}
-	if _, err := os.Stat(store.path); err == nil {
-		if err := k.Load(file.Provider(store.path), toml.Parser()); err != nil {
-			return Config{}, fmt.Errorf("load %s: %w", store.path, err)
+	if _, err := os.Stat(path); err == nil {
+		if err := k.Load(file.Provider(path), toml.Parser()); err != nil {
+			return Config{}, fmt.Errorf("load %s: %w", path, err)
 		}
 	} else if !errors.Is(err, os.ErrNotExist) {
-		return Config{}, fmt.Errorf("stat %s: %w", store.path, err)
+		return Config{}, fmt.Errorf("stat %s: %w", path, err)
 	}
 	var result Config
 	if err := k.Unmarshal("", &result); err != nil {
-		return Config{}, fmt.Errorf("decode %s: %w", store.path, err)
+		return Config{}, fmt.Errorf("decode %s: %w", path, err)
 	}
 	if result.Providers == nil {
 		result.Providers = map[string]ProviderConfig{}
 	}
 	if err := validateConfig(result); err != nil {
-		return Config{}, fmt.Errorf("validate %s: %w", store.path, err)
+		return Config{}, fmt.Errorf("validate %s: %w", path, err)
 	}
 	return result, nil
 }
@@ -324,10 +324,7 @@ func (store *ConfigStore) SaveSettings(changes map[string]any) error {
 		return err
 	}
 	// Validate against the file and environment before replacing the active value.
-	oldPath := store.path
-	store.path = temporary.Name()
-	candidate, validationError := store.read()
-	store.path = oldPath
+	candidate, validationError := store.read(temporary.Name())
 	if validationError != nil {
 		return validationError
 	}

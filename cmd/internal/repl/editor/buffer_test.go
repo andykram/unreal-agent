@@ -99,3 +99,29 @@ func TestReadlineUnicodeKillsYankAndUndo(t *testing.T) {
 		t.Fatalf("forward kill %q", buffer.Source())
 	}
 }
+
+func TestBufferNormalizesLineEndingsAndBoundsUndoBytes(t *testing.T) {
+	var buffer Buffer
+	if err := buffer.Insert("a\r\nb\rc"); err != nil || buffer.Source() != "a\nb\nc" {
+		t.Fatalf("insert = %q, %v", buffer.Source(), err)
+	}
+	large := strings.Repeat("x", MaxSourceBytes-1)
+	if err := buffer.Set(large); err != nil {
+		t.Fatal(err)
+	}
+	for range 40 {
+		if err := buffer.Set(large[1:]); err != nil {
+			t.Fatal(err)
+		}
+		if err := buffer.Set(large); err != nil {
+			t.Fatal(err)
+		}
+	}
+	size := 0
+	for _, value := range buffer.undo {
+		size += len(value.source)
+	}
+	if size > maxUndoBytes {
+		t.Fatalf("undo holds %d bytes, want at most %d", size, maxUndoBytes)
+	}
+}

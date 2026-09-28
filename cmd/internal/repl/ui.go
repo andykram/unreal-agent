@@ -284,7 +284,7 @@ func (model *uiModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.PasteMsg:
 		model.disarmQuit()
 		if model.powerBar != nil {
-			model.powerBar.query += strings.NewReplacer("\n", " ", "\r", " ").Replace(value.Content)
+			model.powerBar.query += singleLine.Replace(value.Content)
 			model.powerBar.selected = 0
 			return model, nil
 		}
@@ -293,6 +293,15 @@ func (model *uiModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if model.rename != nil {
 			return model.updateRenameSession(value)
+		}
+		if model.runtime != nil && model.runtime.options.Approvals != nil && model.runtime.options.Approvals.Pending() != nil {
+			return model, nil
+		}
+		if model.plan != nil {
+			if model.plan.editing {
+				model.plan.comment += singleLine.Replace(sanitizeTerminal(value.Content))
+			}
+			return model, nil
 		}
 		if model.historySearch != nil {
 			model.historySearch.appendQuery(value.Content)
@@ -306,6 +315,14 @@ func (model *uiModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if model.question != nil && model.showQuestion {
 			return model.updateQuestion(value)
+		}
+		if model.resumePopup != nil {
+			return model, nil
+		}
+		if model.popup != nil {
+			model.popup.query += singleLine.Replace(sanitizeTerminal(value.Content))
+			model.popup.selected = 0
+			return model, nil
 		}
 		model.historyIndex = -1
 		if err := model.draft.Insert(value.Content); err != nil {
@@ -1184,7 +1201,7 @@ func (model *uiModel) projectDraft(settings Config, contentWidth int) editor.Pro
 	if hasSelection {
 		selection = append(selection, selected)
 	}
-	if cached.parsedVersion != model.draft.Version() || !cached.valid {
+	if !cached.valid || cached.parsedVersion != model.draft.Version() || cached.markdown != markdown || cached.noColor != model.noColor {
 		cached.spans = nil
 		if markdown {
 			cached.spans = editor.ParseSyntax(model.draft.Source())
@@ -1196,7 +1213,7 @@ func (model *uiModel) projectDraft(settings Config, contentWidth int) editor.Pro
 	spans = append(spans, cached.spans...)
 	spans = append(spans, cached.slashSpans...)
 	value := editor.ProjectParsed(model.draft.Source(), model.draft.Cursor(), width, markdown, spans, selection...)
-	*cached = projectionCache{version: model.draft.Version(), cursor: model.draft.Cursor(), width: width, markdown: markdown, noColor: model.noColor, selection: selected, hasSelection: hasSelection, value: value, valid: true, spans: cached.spans, parsedVersion: cached.parsedVersion}
+	*cached = projectionCache{version: model.draft.Version(), cursor: model.draft.Cursor(), width: width, markdown: markdown, noColor: model.noColor, selection: selected, hasSelection: hasSelection, value: value, valid: true, spans: cached.spans, slashSpans: cached.slashSpans, parsedVersion: cached.parsedVersion}
 	return value
 }
 

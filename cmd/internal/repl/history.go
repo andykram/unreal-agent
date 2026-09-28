@@ -1,11 +1,11 @@
 package repl
 
 import (
-	"bufio"
 	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"slices"
@@ -50,23 +50,18 @@ func (store *HistoryStore) read() ([]HistoryEntry, error) {
 	if err != nil {
 		return nil, err
 	}
-	scanner := bufio.NewScanner(bytes.NewReader(data))
-	scanner.Buffer(make([]byte, 64*1024), 2*editorMaxHistoryBytes)
+	decoder := json.NewDecoder(bytes.NewReader(data))
 	var entries []HistoryEntry
-	for scanner.Scan() {
+	for {
 		var entry HistoryEntry
-		if err := json.Unmarshal(scanner.Bytes(), &entry); err != nil {
-			return nil, fmt.Errorf("parse history %s line %d: %w", store.path, len(entries)+1, err)
+		if err := decoder.Decode(&entry); errors.Is(err, io.EOF) {
+			return entries, nil
+		} else if err != nil {
+			return nil, fmt.Errorf("parse history %s entry %d: %w", store.path, len(entries)+1, err)
 		}
 		entries = append(entries, entry)
 	}
-	if err := scanner.Err(); err != nil {
-		return nil, fmt.Errorf("read history %s: %w", store.path, err)
-	}
-	return entries, nil
 }
-
-const editorMaxHistoryBytes = 4 << 20
 
 func (store *HistoryStore) Append(kind string, id session.ID, value, admission string, maxEntries int, attachmentIDs ...string) (bool, error) {
 	if kind != "prompt" && kind != "command" {

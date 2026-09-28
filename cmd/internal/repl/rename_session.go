@@ -9,6 +9,9 @@ import (
 	"github.com/unreallabsai/unreal-agent/cmd/internal/repl/editor"
 )
 
+// singleLine flattens pasted text for one-line overlay inputs.
+var singleLine = strings.NewReplacer("\n", " ", "\r", " ")
+
 type renameSessionForm struct {
 	id, name, err string
 	draft         editor.Buffer
@@ -42,7 +45,7 @@ func (model *uiModel) updateRenameSession(message tea.Msg) (tea.Model, tea.Cmd) 
 	current := model.rename
 	switch value := message.(type) {
 	case tea.PasteMsg:
-		_ = current.draft.Insert(strings.NewReplacer("\n", " ", "\r", " ").Replace(sanitizeTerminal(value.Content)))
+		_ = current.draft.Insert(singleLine.Replace(sanitizeTerminal(value.Content)))
 	case tea.KeyPressMsg:
 		if handleReadline(&current.draft, value) {
 			return model, nil

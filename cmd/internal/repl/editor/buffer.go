@@ -2,6 +2,7 @@ package editor
 
 import (
 	"errors"
+	"slices"
 	"strings"
 	"unicode/utf8"
 
@@ -9,6 +10,18 @@ import (
 )
 
 const MaxSourceBytes = 4 << 20
+
+// maxUndoBytes bounds undo memory because each snapshot holds a full source.
+const maxUndoBytes = 16 * MaxSourceBytes
+
+// normalizeLineEndings converts pasted and imported CRLF or CR text to the LF
+// form that projection and cursor movement expect.
+func normalizeLineEndings(value string) string {
+	if !strings.Contains(value, "\r") {
+		return value
+	}
+	return strings.NewReplacer("\r\n", "\n", "\r", "\n").Replace(value)
+}
 
 type snapshot struct {
 	source    string
@@ -70,6 +83,7 @@ func (buffer *Buffer) Restore(source string, cursor int) error {
 }
 
 func (buffer *Buffer) Set(source string) error {
+	source = normalizeLineEndings(source)
 	if err := validEdit(source); err != nil {
 		return err
 	}
@@ -86,6 +100,7 @@ func (buffer *Buffer) Insert(value string) error {
 	if !utf8.ValidString(value) {
 		return errors.New("inserted text is not valid UTF-8")
 	}
+	value = normalizeLineEndings(value)
 	selected, hasSelection := buffer.Selection()
 	removed := 0
 	if hasSelection {
@@ -255,8 +270,13 @@ func (buffer *Buffer) Redo() bool {
 func (buffer *Buffer) saveUndo() {
 	buffer.version++
 	buffer.undo = append(buffer.undo, snapshot{buffer.source, buffer.cursor, buffer.anchor, buffer.selecting})
-	if len(buffer.undo) > 1000 {
-		buffer.undo = buffer.undo[len(buffer.undo)-1000:]
+	size := 0
+	for index := len(buffer.undo) - 1; index >= 0; index-- {
+		size += len(buffer.undo[index].source)
+		if len(buffer.undo)-index > 1000 || size > maxUndoBytes {
+			buffer.undo = slices.Delete(buffer.undo, 0, index+1)
+			break
+		}
 	}
 	buffer.redo = nil
 }

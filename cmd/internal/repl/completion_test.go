@@ -166,7 +166,7 @@ func TestInlineSlashCompletionPreservesDraft(t *testing.T) {
 	}
 	if got := inlineSkillAliases("Please /review this. Then /review.\nthen /model later", model.skills); got != "Please $review this. Then $review.\nthen /model later" {
 		t.Fatalf("aliases = %q", got)
-	} else if !explicitSkillNames(got)["review"] {
+	} else if !explicitSkillNames(got)["review"] || !explicitSkillNames(inlineSkillAliases("Use /review: check", model.skills))["review"] {
 		t.Fatal("punctuation entered the skill name")
 	}
 }

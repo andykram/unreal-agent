@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 	"uuid"
 
@@ -108,10 +109,9 @@ type Runtime struct {
 	options      RuntimeOptions
 	mailbox      runtimeMailbox
 	done         chan struct{}
-	generation   uint64
+	generation   atomic.Uint64
 	active       *activeTask
 	queue        []submission
-	failed       error
 	closed       bool
 }
 
@@ -186,12 +186,17 @@ func (runtime *Runtime) Submit(ctx context.Context, text string, steer bool) (in
 	if runtime.closed {
 		return "", "", errors.New("runtime is closed")
 	}
-	if runtime.failed != nil {
-		return "", "", fmt.Errorf("runtime needs recovery: %w", runtime.failed)
-	}
 	if runtime.active == nil {
-		if err := runtime.startLocked(value); err != nil {
+		// Start the oldest retained prompt first. A successful start also
+		// retries the canonical work left by a failed task.
+		runtime.queue = append(runtime.queue, value)
+		if err := runtime.startLocked(runtime.queue[0]); err != nil {
+			runtime.queue = runtime.queue[:len(runtime.queue)-1]
 			return "", "", err
+		}
+		runtime.queue = runtime.queue[1:]
+		if len(runtime.queue) != 0 {
+			return value.input.ID, AdmissionQueued, nil
 		}
 		return value.input.ID, AdmissionSent, nil
 	}
@@ -269,8 +274,7 @@ func (runtime *Runtime) startWithRestoredLocked(restored sessionstore.ResumeStat
 		return fmt.Errorf("prepare model context: %w", err)
 	}
 	runtime.systemPrompt = basePromptText(builder)
-	runtime.generation++
-	generation := runtime.generation
+	generation := runtime.generation.Add(1)
 	observer := runtime.options.Sessions.AddObserver(func(id session.ID, item sessionstore.Item) {
 		if id == runtime.options.SessionID {
 			if runtime.options.Questions != nil {
@@ -311,8 +315,7 @@ func (runtime *Runtime) runTask(task *activeTask, current coordinator.Coordinato
 	restored, resumeErr := runtime.options.Sessions.Resume(runtime.ctx, runtime.options.SessionID)
 	if resumeErr != nil {
 		runtime.queue = append(append([]submission(nil), task.pending...), runtime.queue...)
-		runtime.failed = errors.Join(err, resumeErr)
-		runtime.mailbox.publish(RuntimeEvent{Kind: EventTaskError, Generation: task.generation, Err: runtime.failed})
+		runtime.mailbox.publish(RuntimeEvent{Kind: EventTaskError, Generation: task.generation, Err: errors.Join(err, resumeErr)})
 		return
 	}
 	seen := make(map[inbox.ID]struct{}, len(restored.ExternalInputIDs))
@@ -326,7 +329,6 @@ func (runtime *Runtime) runTask(task *activeTask, current coordinator.Coordinato
 		}
 	}
 	if err != nil {
-		runtime.failed = err
 		runtime.mailbox.publish(RuntimeEvent{Kind: EventTaskError, Generation: task.generation, Err: err})
 		return
 	}
@@ -336,7 +338,6 @@ func (runtime *Runtime) runTask(task *activeTask, current coordinator.Coordinato
 	}
 	next := runtime.queue[0]
 	if err := runtime.startLocked(next); err != nil {
-		runtime.failed = err
 		runtime.mailbox.publish(RuntimeEvent{Kind: EventTaskError, Generation: task.generation, Err: err})
 		return
 	}

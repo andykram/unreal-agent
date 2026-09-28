@@ -69,6 +69,15 @@ func TestAskUserValidation(t *testing.T) {
 			t.Fatalf("accepted invalid result %#v", result)
 		}
 	}
+	optional := AskUserArgs{Title: "Optional", Questions: []Question{
+		{ID: "note", Prompt: "Note?", Kind: "text"},
+		{ID: "pick", Prompt: "Pick?", Kind: "single_select", AllowOther: true, Options: []QuestionOption{{ID: "a", Label: "A"}}},
+		{ID: "skip", Prompt: "Skip?", Kind: "single_select", AllowOther: true, Options: []QuestionOption{{ID: "a", Label: "A"}}},
+	}}
+	current := &questionForm{plan: AskUserPlan{Form: optional}, values: []questionValue{{text: "  "}, {selected: "a", other: " "}, {selected: skipOptionID, other: "custom"}}}
+	if err := validateAskUserResult(optional, current.Result()); err != nil {
+		t.Fatalf("blank or Other-over-Skip answers were rejected: %v", err)
+	}
 	form.Questions[0].Recommended = []string{"missing"}
 	if err := validateAskUserForm(form); err == nil {
 		t.Fatal("accepted unknown recommended option")

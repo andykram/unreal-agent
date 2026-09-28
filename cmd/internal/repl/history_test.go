@@ -2,6 +2,7 @@ package repl
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/unreallabsai/unreal-agent/cmd/internal/repl/editor"
@@ -26,6 +27,24 @@ func TestHistoryPersistsDeduplicatesAndRetainsEntries(t *testing.T) {
 	}
 	if len(entries) != 2 || entries[0].Text != "/help" || entries[1].Text != "two" || entries[1].SessionID != "first" {
 		t.Fatalf("history entries = %#v", entries)
+	}
+}
+
+func TestHistoryReadsEntriesLargerThanOneScannerToken(t *testing.T) {
+	root := t.TempDir()
+	state, err := OpenSessionState(filepath.Join(root, "state"), root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	store := NewHistoryStore(state)
+	large := strings.Repeat("<", 2<<20) // JSON escapes each byte to six bytes.
+	for _, text := range []string{large, "next"} {
+		if _, err := store.Append("prompt", session.ID("first"), text, "immediate", 10); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if entries, err := store.Entries(); err != nil || len(entries) != 2 || entries[0].Text != large {
+		t.Fatalf("history entries = %d, %v", len(entries), err)
 	}
 }
 

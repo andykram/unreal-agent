@@ -39,7 +39,7 @@ func (model *uiModel) selectSidebarThread(id string) (tea.Model, tea.Cmd) {
 	command, err := model.switchSession(id)
 	if err != nil {
 		model.message = err.Error()
-		return model, nil
+		return model, command
 	}
 	return model, tea.Batch(command, model.syncThreadQuestion())
 }

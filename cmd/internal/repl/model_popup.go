@@ -72,6 +72,8 @@ func (model *uiModel) refreshCatalog(force bool) tea.Cmd {
 
 func (model *uiModel) updateModelPopup(key tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	filtered := model.popup.filtered()
+	// A catalog refresh can shrink the choices under the current selection.
+	model.popup.selected = min(model.popup.selected, max(0, len(filtered)-1))
 	switch key.String() {
 	case "esc":
 		model.popup = nil

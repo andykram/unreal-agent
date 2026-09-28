@@ -79,10 +79,10 @@ func (model *uiModel) openExternalEditor() tea.Cmd {
 	}
 	command := strings.TrimSpace(model.config.Current().Editor.Command)
 	if command == "" {
-		command = strings.TrimSpace(model.getenv("EDITOR"))
+		command = strings.TrimSpace(model.getenv("VISUAL"))
 	}
 	if command == "" {
-		command = strings.TrimSpace(model.getenv("VISUAL"))
+		command = strings.TrimSpace(model.getenv("EDITOR"))
 	}
 	if command == "" {
 		command = "vi"

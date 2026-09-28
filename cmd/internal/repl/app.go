@@ -258,8 +258,12 @@ func newAppRuntime(ctx context.Context, state *SessionState, router *ModelRouter
 		managerCancel()
 		return nil, err
 	}
-	questions.SetNotify(func() { runtime.mailbox.publish(RuntimeEvent{Kind: EventQuestion, Generation: runtime.generation}) })
-	registry.notify = func() { runtime.mailbox.publish(RuntimeEvent{Kind: EventApproval, Generation: runtime.generation}) }
+	questions.SetNotify(func() {
+		runtime.mailbox.publish(RuntimeEvent{Kind: EventQuestion, Generation: runtime.generation.Load()})
+	})
+	registry.notify = func() {
+		runtime.mailbox.publish(RuntimeEvent{Kind: EventApproval, Generation: runtime.generation.Load()})
+	}
 	runtime.options.Approvals = registry
 	if err := runtime.Recover(); err != nil {
 		runtime.Close()

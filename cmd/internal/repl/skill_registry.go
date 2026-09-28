@@ -111,7 +111,7 @@ var skillToken = regexp.MustCompile(`(?:^|[[:space:]])\$([a-zA-Z0-9][a-zA-Z0-9_:
 func explicitSkillNames(text string) map[string]bool {
 	names := map[string]bool{}
 	for _, match := range skillToken.FindAllStringSubmatch(text, -1) {
-		names[match[1]] = true
+		names[strings.TrimRight(match[1], ":")] = true
 	}
 	return names
 }

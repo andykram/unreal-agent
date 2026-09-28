@@ -103,23 +103,27 @@ func (current *questionForm) Result() AskUserResult {
 	for index, question := range current.plan.Form.Questions {
 		value := current.values[index]
 		answer := QuestionAnswer{QuestionID: question.ID}
+		text, other := value.text, value.other
+		if strings.TrimSpace(text) == "" {
+			text = ""
+		}
+		if strings.TrimSpace(other) == "" {
+			other = ""
+		}
 		switch question.Kind {
 		case "text":
-			answer.Text = value.text
-			answer.Skipped = !question.Required && strings.TrimSpace(value.text) == ""
+			answer.Text = text
+			answer.Skipped = !question.Required && text == ""
 		case "single_select":
-			if value.selected != "" && value.selected != skipOptionID {
+			answer.Text = other
+			if other == "" && value.selected != "" && value.selected != skipOptionID {
 				answer.Selected = []string{value.selected}
 			}
-			answer.Text = value.other
-			if strings.TrimSpace(answer.Text) != "" {
-				answer.Selected = nil
-			}
-			answer.Skipped = value.selected == skipOptionID || !question.Required && len(answer.Selected) == 0 && strings.TrimSpace(value.other) == ""
+			answer.Skipped = other == "" && (value.selected == skipOptionID || !question.Required && len(answer.Selected) == 0)
 		case "multi_select":
 			answer.Selected = append([]string(nil), value.multiple...)
-			answer.Text = value.other
-			answer.Skipped = !question.Required && len(answer.Selected) == 0 && strings.TrimSpace(value.other) == ""
+			answer.Text = other
+			answer.Skipped = !question.Required && len(answer.Selected) == 0 && other == ""
 		}
 		result.Answers = append(result.Answers, answer)
 	}

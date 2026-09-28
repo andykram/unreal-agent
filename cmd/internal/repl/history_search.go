@@ -87,7 +87,7 @@ func (model *uiModel) updateHistorySearch(key tea.KeyPressMsg) (tea.Model, tea.C
 }
 
 func (search *historySearchPopup) appendQuery(text string) {
-	text = strings.NewReplacer("\r", " ", "\n", " ").Replace(text)
+	text = singleLine.Replace(text)
 	if utf8.RuneCountInString(search.query)+utf8.RuneCountInString(text) > 256 {
 		return
 	}

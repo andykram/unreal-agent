@@ -1,6 +1,7 @@
 package repl
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -82,7 +83,7 @@ func (model *uiModel) updateResumePopup(key tea.KeyPressMsg) (tea.Model, tea.Cmd
 		cmd, err := model.switchSession(choice.Metadata.SessionID)
 		if err != nil {
 			model.message = err.Error()
-			return model, nil
+			return model, cmd
 		}
 		model.resumePopup = nil
 		model.draft.Clear()
@@ -119,11 +120,14 @@ func (model *uiModel) switchSession(nameOrID string) (tea.Cmd, error) {
 		}
 	}
 	if _, err := model.state.Resume(model.ctx, nameOrID); err != nil {
-		if oldID != "" {
-			_, _ = model.state.Resume(model.ctx, oldID)
-			_, _ = model.startRuntime()
+		if oldID == "" {
+			return nil, err
 		}
-		return nil, err
+		if _, rollbackErr := model.state.Resume(model.ctx, oldID); rollbackErr != nil {
+			return nil, errors.Join(err, rollbackErr)
+		}
+		command, rollbackErr := model.startRuntime()
+		return command, errors.Join(err, rollbackErr)
 	}
 	model.cleanupAttachments()
 	model.cleanupHistoryDraftAttachments()

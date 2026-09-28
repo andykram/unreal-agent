@@ -271,8 +271,11 @@ func (state *SessionState) ForkCurrent(ctx context.Context, name string) (Sessio
 	if _, err := state.Store.Fork(ctx, id, session.ID(parent.SessionID), turn); err != nil {
 		return SessionMetadata{}, err
 	}
+	state.metadataMu.Lock()
+	origins := cloneOrigins(state.origins)
+	state.metadataMu.Unlock()
 	now := time.Now().UTC()
-	metadata := SessionMetadata{Version: metadataVersion, SessionID: string(id), Name: name, Workspace: state.Workspace, CreatedAt: now, UpdatedAt: now, ParentSessionID: parent.SessionID, ForkTurnID: string(turn), ResponseOrigins: cloneOrigins(parent.ResponseOrigins)}
+	metadata := SessionMetadata{Version: metadataVersion, SessionID: string(id), Name: name, Workspace: state.Workspace, CreatedAt: now, UpdatedAt: now, ParentSessionID: parent.SessionID, ForkTurnID: string(turn), ResponseOrigins: origins}
 	if err := state.saveMetadata(metadata); err != nil {
 		return SessionMetadata{}, err
 	}

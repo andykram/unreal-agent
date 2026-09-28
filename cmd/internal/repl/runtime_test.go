@@ -3,7 +3,9 @@ package repl
 import (
 	"context"
 	"encoding/json/jsontext"
+	"errors"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 	"uuid"
@@ -263,4 +265,63 @@ func TestRuntimeHardStopRetainsQueue(t *testing.T) {
 	if err != nil || len(state.ExternalInputIDs) != 1 {
 		t.Fatalf("stored input IDs after stop = %#v, %v", state.ExternalInputIDs, err)
 	}
+	if _, admission, err := runtime.Submit(t.Context(), "later", false); err != nil || admission != AdmissionQueued {
+		t.Fatalf("later admission = %q, %v", admission, err)
+	}
+	// The new task first finishes the interrupted turn from canonical state.
+	answerRuntimeCall(nextRuntimeCall(t, adapter))
+	queued := nextRuntimeCall(t, adapter)
+	if !requestContains(queued.request, "queued") || requestContains(queued.request, "later") {
+		t.Fatal("retained prompt did not start before the new prompt")
+	}
+	answerRuntimeCall(queued)
+	later := nextRuntimeCall(t, adapter)
+	if !requestContains(later.request, "later") {
+		t.Fatal("new prompt did not follow the retained prompt")
+	}
+	answerRuntimeCall(later)
+	waitRuntimeTasks(t, runtime, 2)
+}
+
+type failOnceLLM struct {
+	next   *runtimeAdapter
+	failed atomic.Bool
+}
+
+func (adapter *failOnceLLM) Respond(ctx context.Context, request llm.Request, options llm.RequestOptions) (llm.Response, error) {
+	if adapter.failed.CompareAndSwap(false, true) {
+		return llm.Response{}, errors.New("transient model failure")
+	}
+	return adapter.next.Respond(ctx, request, options)
+}
+
+func TestRuntimeRetriesAfterTaskFailure(t *testing.T) {
+	runtime, adapter, _, _ := newRuntimeTestHost(t)
+	runtime.options.LLM = &failOnceLLM{next: adapter}
+	if _, _, err := runtime.Submit(t.Context(), "first", false); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.After(3 * time.Second)
+	for failed := false; !failed; {
+		for _, event := range runtime.DrainEvents() {
+			failed = failed || event.Kind == EventTaskError
+		}
+		if !failed {
+			select {
+			case <-runtime.Events():
+			case <-deadline:
+				t.Fatal("task did not fail")
+			}
+		}
+	}
+	if _, admission, err := runtime.Submit(t.Context(), "retry", false); err != nil || admission != AdmissionSent {
+		t.Fatalf("retry admission = %q, %v", admission, err)
+	}
+	answerRuntimeCall(nextRuntimeCall(t, adapter))
+	call := nextRuntimeCall(t, adapter)
+	if !requestContains(call.request, "retry") {
+		t.Fatal("retry prompt was not sent")
+	}
+	answerRuntimeCall(call)
+	waitRuntimeTasks(t, runtime, 1)
 }
