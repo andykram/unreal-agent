@@ -1,0 +1,5 @@
+[
+  {"name": "diagnose", "description": "Diagnose failures through evidence and focused experiments."},
+  {"name": "documentation", "description": "Write developer documentation with a clear purpose and audience."},
+  {"name": "frontend-design", "description": "Create intentional visual design for interfaces."}
+]
