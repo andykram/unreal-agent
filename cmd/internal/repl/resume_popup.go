@@ -96,7 +96,7 @@ func (model *uiModel) updateResumePopup(key tea.KeyPressMsg) (tea.Model, tea.Cmd
 		cmd, err := model.newSession()
 		if err != nil {
 			model.message = err.Error()
-			return model, nil
+			return model, cmd
 		}
 		model.resumePopup = nil
 		model.message = "Started a new session."
@@ -120,14 +120,7 @@ func (model *uiModel) switchSession(nameOrID string) (tea.Cmd, error) {
 		}
 	}
 	if _, err := model.state.Resume(model.ctx, nameOrID); err != nil {
-		if oldID == "" {
-			return nil, err
-		}
-		if _, rollbackErr := model.state.Resume(model.ctx, oldID); rollbackErr != nil {
-			return nil, errors.Join(err, rollbackErr)
-		}
-		command, rollbackErr := model.startRuntime()
-		return command, errors.Join(err, rollbackErr)
+		return model.rollbackSession(oldID, err)
 	}
 	model.cleanupAttachments()
 	model.cleanupHistoryDraftAttachments()
@@ -140,6 +133,7 @@ func (model *uiModel) newSession() (tea.Cmd, error) {
 	if model.runtime != nil && (model.runtime.IsBusy() || model.runtime.QueueLength() != 0) {
 		return nil, fmt.Errorf("finish active work and queued prompts before starting a new session")
 	}
+	oldID := model.state.Current.SessionID
 	if model.runtime != nil {
 		model.runtime.Close()
 		model.runtime = nil
@@ -148,13 +142,26 @@ func (model *uiModel) newSession() (tea.Cmd, error) {
 		return nil, err
 	}
 	if _, err := model.state.New(model.ctx); err != nil {
-		return nil, err
+		return model.rollbackSession(oldID, err)
 	}
 	model.cleanupAttachments()
 	model.cleanupHistoryDraftAttachments()
 	model.question = nil
 	model.showQuestion = false
 	return model.startRuntime()
+}
+
+// rollbackSession reopens the previous session after a failed session change.
+// It returns the restored runtime's command so the UI keeps receiving events.
+func (model *uiModel) rollbackSession(oldID string, err error) (tea.Cmd, error) {
+	if oldID == "" {
+		return nil, err
+	}
+	if _, rollbackErr := model.state.Resume(model.ctx, oldID); rollbackErr != nil {
+		return nil, errors.Join(err, rollbackErr)
+	}
+	command, rollbackErr := model.startRuntime()
+	return command, errors.Join(err, rollbackErr)
 }
 
 func (model *uiModel) startRuntime() (tea.Cmd, error) {

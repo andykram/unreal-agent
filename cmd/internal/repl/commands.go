@@ -233,7 +233,7 @@ func (model *uiModel) runNew(_, _ string) (tea.Model, tea.Cmd) {
 	command, err := model.newSession()
 	if err != nil {
 		model.message = err.Error()
-		return model, nil
+		return model, command
 	}
 	model.draft.Clear()
 	model.message = "Started a new session."

@@ -407,15 +407,8 @@ func (model *uiModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 				return model, nil
 			}
 		}
-		if value.String() == "ctrl+d" {
-			return model, tea.Quit
-		}
-
 		if model.plan != nil {
 			return model.updatePlan(value)
-		}
-		if value.String() == "ctrl+d" {
-			return model, tea.Quit
 		}
 
 		if model.historySearch != nil {
