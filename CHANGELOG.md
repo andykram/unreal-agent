@@ -28,3 +28,11 @@ Each pull request adds its entry here. PR links provide stable history across re
 
 - Add JSON Schema output formats to model requests and encode native structured outputs for Responses API providers.
 - Surface completed provider refusals as `StopRefused` while preserving the refusal text, so structured-output consumers can distinguish them from schema output.
+
+### Python workflow library ([#6](https://github.com/andykram/unreal-agent/pull/6))
+
+- Compile Python workflow graphs with CPython WASI and Pydantic in Go without cgo.
+- Add agent pipelines, structured result references, conditional branches, joins, and bounded repair loops.
+- Persist execution checkpoints and memoized results, with recovery decisions, idempotency keys, executor key isolation, and retention cleanup.
+- Generate Python skill types from skill metadata and documented parameters.
+- Add an interactive execution simulator, complex examples, and annotated developer guides published through GitHub Pages. Live execution is a separate integration.

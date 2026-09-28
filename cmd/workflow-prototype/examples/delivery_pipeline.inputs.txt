@@ -1,0 +1,30 @@
+n
+n
+o charter {"objective":"Deduplicate requests across services","compatibility_rules":["Retain existing request IDs","No incompatible schema changes"],"rollback_required":true}
+n
+o api-plan {"service":"api","change":"Accept an idempotency key","files":["api/requests.go"],"rollback":"Disable idempotency handling"}
+o worker-plan {"service":"worker","change":"Skip duplicate jobs","files":["worker/jobs.go"],"rollback":"Disable duplicate filtering"}
+o billing-plan {"service":"billing","change":"Prevent duplicate charges","files":["billing/charges.go"],"rollback":"Disable new charge lookup"}
+o gateway-plan {"service":"gateway","change":"Preserve request IDs","files":["gateway/headers.go"],"rollback":"Disable header forwarding change"}
+n
+o api-implement {"service":"api","summary":"Accepted idempotency keys","changed_files":["api/requests.go"],"checks":["Request replay check passed"]}
+o worker-implement {"service":"worker","summary":"Filtered duplicate jobs","changed_files":["worker/jobs.go"],"checks":["Job replay check passed"]}
+o billing-implement {"service":"billing","summary":"Rejected duplicate charges","changed_files":["billing/charges.go"],"checks":["Charge replay check passed"]}
+o gateway-implement {"service":"gateway","summary":"Preserved request IDs","changed_files":["gateway/headers.go"],"checks":["Header forwarding check passed"]}
+n
+o api-review {"service":"api","approved":true,"findings":[],"rollback_reviewed":true}
+o worker-review {"service":"worker","approved":true,"findings":[],"rollback_reviewed":true}
+o billing-review {"service":"billing","approved":true,"findings":[],"rollback_reviewed":true}
+o gateway-review {"service":"gateway","approved":true,"findings":[],"rollback_reviewed":true}
+n
+o verify-0 {"service":"api","passed":true,"evidence":["Duplicate request rejected without duplicate write"]}
+o verify-1 {"service":"worker","passed":true,"evidence":["Duplicate job did not execute twice"]}
+o verify-2 {"service":"billing","passed":true,"evidence":["Duplicate charge did not debit twice"]}
+o verify-3 {"service":"gateway","passed":true,"evidence":["Request ID survived proxy retries"]}
+n
+o assess-readiness {"ready":true,"checked_services":4,"summary":"All four service verifiers passed","unresolved":[]}
+a
+n
+n
+n
+q

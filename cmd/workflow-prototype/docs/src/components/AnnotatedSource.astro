@@ -1,0 +1,65 @@
+---
+interface Annotation {
+  match: string;
+  lines?: number;
+  title: string;
+  body: string;
+}
+interface Props {
+  id: string;
+  filename: string;
+  source: string;
+  annotations: Annotation[];
+  open?: boolean;
+}
+const { id, filename, source, annotations, open = false } = Astro.props;
+const lines = source.trimEnd().split('\n');
+const notes = annotations.map((note) => {
+  const start = lines.findIndex((line) => line.includes(note.match));
+  if (start < 0) throw new Error(`${filename}: annotation marker missing: ${note.match}`);
+  return { ...note, start: start + 1, end: Math.min(lines.length, start + (note.lines ?? 1)) };
+});
+---
+<details class="source-viewer" open={open}>
+  <summary><span>Read annotated source</span><code>{filename}</code><small>{lines.length} lines</small></summary>
+  <div class="source-layout">
+    <div class="source-scroll" tabindex="0" role="region" aria-label={`${filename} Python source`}>
+      <pre><code>{lines.map((line, index) => {
+        const number = index + 1;
+        const marked = notes.some((note) => number >= note.start && number <= note.end);
+        return <span id={`${id}-L${number}`} class:list={['source-line', { marked }]}><a class="line-number" href={`#${id}-L${number}`} aria-label={`Line ${number}`}>{number}</a><span>{line || ' '}</span></span>;
+      })}</code></pre>
+    </div>
+    <aside aria-label={`${filename} annotations`}>
+      <p class="notes-label">Reading the graph</p>
+      {notes.map((note, index) => <section class="source-note">
+        <a href={`#${id}-L${note.start}`}><span class="note-number">{index + 1}</span><strong>{note.title}</strong><small>L{note.start}{note.end > note.start ? `–${note.end}` : ''}</small></a>
+        <p>{note.body}</p>
+      </section>)}
+    </aside>
+  </div>
+</details>
+<style>
+  .source-viewer { margin: 1.5rem 0 2rem; border: 1px solid var(--sl-color-gray-5); border-radius: .5rem; overflow: clip; }
+  summary { padding: 1rem; cursor: pointer; background: var(--sl-color-gray-6); }
+  summary > span { font-weight: 650; }
+  summary code { margin-inline: .65rem; font-size: .8rem; overflow-wrap: anywhere; }
+  summary small { color: var(--sl-color-gray-2); white-space: nowrap; }
+  summary:focus-visible, a:focus-visible, .source-scroll:focus-visible { outline: 2px solid var(--sl-color-text-accent); outline-offset: -2px; }
+  .source-layout { display: grid; grid-template-columns: minmax(0, 1fr); }
+  .source-scroll { overflow: auto; max-height: 42rem; background: var(--sl-color-black); }
+  pre { margin: 0; padding: 1rem 0; border: none; background: transparent; font-size: .76rem; line-height: 1.75; tab-size: 4; }
+  pre code { display: block; padding: 0; color: var(--sl-color-gray-1); }
+  .source-line { display: block; width: max-content; min-width: 100%; padding-right: 1rem; scroll-margin-block: 6rem; }
+  .source-line.marked { background: color-mix(in srgb, var(--sl-color-accent) 9%, transparent); }
+  .source-line:target { background: color-mix(in srgb, var(--sl-color-accent) 25%, transparent); box-shadow: inset 3px 0 var(--sl-color-text-accent); }
+  .line-number { display: inline-block; width: 3.5rem; padding-right: 1rem; text-align: right; color: var(--sl-color-gray-3); text-decoration: none; user-select: none; }
+  aside { padding: 1.1rem; border-top: 1px solid var(--sl-color-gray-5); background: var(--sl-color-bg-nav); }
+  .notes-label { margin: 0 0 1rem; font-size: .72rem; text-transform: uppercase; letter-spacing: .1em; color: var(--sl-color-gray-2); }
+  .source-note + .source-note { margin-top: 1.35rem; }
+  .source-note a { display: flex; gap: .5rem; align-items: baseline; text-decoration: none; font-size: .83rem; }
+  .source-note a small { margin-left: auto; white-space: nowrap; font-family: var(--sl-font-mono); font-size: .68rem; }
+  .note-number { color: var(--sl-color-gray-3); font-family: var(--sl-font-mono); }
+  .source-note p { margin: .4rem 0 0; font-size: .8rem; line-height: 1.55; color: var(--sl-color-gray-2); }
+  @media (min-width: 60rem) { aside { display: grid; grid-template-columns: 1fr 1fr; gap: 1.35rem; } .notes-label { grid-column: 1 / -1; margin-bottom: 0; } .source-note + .source-note { margin-top: 0; } }
+</style>

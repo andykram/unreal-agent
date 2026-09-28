@@ -1,0 +1,223 @@
+---
+title: Explore complex workflows
+description: Compare parallel release routes, staged migration rehearsals, and nested investigations.
+---
+
+import AnnotatedSource from '../../../components/AnnotatedSource.astro';
+import releaseSource from '../../../../../examples/service_release.py?raw';
+import migrationSource from '../../../../../examples/migration_rehearsal.py?raw';
+import investigationSource from '../../../../../examples/investigation.py?raw';
+import reviewSource from '../../../../../examples/structured_review.py?raw';
+import pipelineSource from '../../../../../examples/agent_pipeline.py?raw';
+import deliverySource from '../../../../../examples/delivery_pipeline.py?raw';
+import skillSource from '../../../../../examples/skill_parameters.py?raw';
+
+
+The `examples/` directory contains larger workflows and a structured-output example. Each script uses
+Python to build one static graph, then calls `flow.export()`.
+
+Open a source viewer below and select an annotation to jump to its highlighted
+lines. Source is imported from the runnable examples when the site builds.
+
+:::caution[Descriptions, not operations]
+Commands, deployments, database changes, agents, and worktrees are simulated.
+The command paths in these examples describe intended operations. They do not
+require those programs to exist. Worktrunk names and bases remain metadata.
+Prompts describe evidence handling; the prototype does not transfer artifacts.
+:::
+
+## Run an example
+
+From `cmd/workflow-prototype`, start the viewer:
+
+```sh
+./run.sh -script examples/service_release.py
+./run.sh -script examples/migration_rehearsal.py
+./run.sh -script examples/investigation.py
+```
+
+Add `-json` to inspect the validated graph without simulation. Add `-auto` to
+pass ready checks automatically until approvals prevent further progress.
+
+In the viewer, `n` advances ready work. Use `p ID` or `b ID` for check results,
+`a` to approve all ready approvals, and `f ID` to inject an execution error.
+Reset with `r` before exploring another outcome. See the
+[viewer reference](/reference/cli/) for all controls.
+
+## Four-service release
+
+**Source:** `examples/service_release.py`.
+
+Four service routes share a contract baseline, then use independent workspaces.
+Each route has parallel lint and compatibility checks, bounded repairs, review,
+approval, rollout observation, and a possible rollback.
+
+| Scenario | What to simulate | Expected route |
+| --- | --- | --- |
+| Healthy release | Pass `api-verify`, approve, then pass `api-observe` | `api-healthy` reaches `api-settled` |
+| Rejected implementation | Exhaust all three `api-verify` checks | `api-rejected` completes; rollout skips |
+| Rollback | Pass verification, approve, then exhaust both observation checks | `api-rollback` reaches the service join |
+| Operational failure | Inject an execution error in a required step | That service join and the final report remain blocked |
+
+Repeat with `worker`, `billing`, or `gateway` prefixes. The final report waits
+for all four service joins. A rejected service can be reported without implying
+that it shipped. The archive approval is a separate final gate.
+
+<AnnotatedSource id="release" filename="examples/service_release.py" source={releaseSource} open annotations={[
+  { match: 'def service_route', lines: 5, title: 'Independent routes', body: 'Each service gets a worktree. Implementation waits for both that workspace and the shared contract baseline.' },
+  { match: 'verify = flow.repeat_check', lines: 5, title: 'Repair with named skills', body: 'Verification has a finite repair budget. Skill references describe repair-agent capabilities; the prototype does not load them.' },
+  { match: 'approve = flow.approval', lines: 3, title: 'Release gate', body: 'The rollout depends on approval. Exhausted verification takes the rejected route instead.' },
+  { match: 'settled = flow.join', lines: 2, title: 'Report every outcome', body: 'Healthy, rolled-back, and rejected endpoints converge. A completed report does not imply that every service shipped.' },
+]} />
+
+## Staged migration rehearsal
+
+**Source:** `examples/migration_rehearsal.py`.
+
+The graph progresses through expand, backfill, and contract stages in one
+workspace. Each stage rehearses changes, checks a canary, and requests approval
+before widening. Only its accepted path starts the next stage.
+
+| Scenario | What to simulate | Expected route |
+| --- | --- | --- |
+| Full rehearsal | Approve the initial gate, then pass checks and approve each stage | All stages advance, followed by audit |
+| Preflight rejection | Exhaust `expand-rehearse` | Expand records a stop; later stages skip; audit remains reachable |
+| Canary rollback | Pass rehearsal, then exhaust `backfill-canary` | Rollback and verification run; contract skips; audit remains reachable |
+
+Each stage joins its accepted, rejected, and rolled-back endpoints. The final
+join tolerates skipped later stages, so an early stop still receives an audit.
+An execution error blocks the affected route instead of becoming a normal rejection.
+
+<AnnotatedSource id="migration" filename="examples/migration_rehearsal.py" source={migrationSource} annotations={[
+  { match: 'inventory = flow.agent', lines: 4, title: 'Domain skill reference', body: 'The inventory agent names the CockroachDB skill. Skill lookup and database operations remain simulated.' },
+  { match: 'canary = flow.repeat_check', lines: 6, title: 'A conditional repair loop', body: 'Canary work only starts after a passing rehearsal. An exhausted rehearsal selects the stop report.' },
+  { match: 'return advance, settled', title: 'Progress and audit differ', body: 'The next stage requires the accepted endpoint. The audit accepts any settled route, including a stop or rollback.' },
+  { match: 'end = flow.join', lines: 4, title: 'Audit early stops', body: 'Later stages can skip after an early stop. This join still reaches the audit when at least one stage settled.' },
+]} />
+
+## Multi-strategy investigation
+
+**Source:** `examples/investigation.py`.
+
+Trace, database, and runtime investigations use separate workspaces. Each primary
+probe can enter deeper validation or a fallback investigation. Validation and
+fallback checks each split again before joining a strategy summary.
+
+| Scenario | What to simulate | Expected route |
+| --- | --- | --- |
+| Supported hypothesis | Pass `traces-probe` and `traces-validate` | Supported route reaches the summary |
+| Counterevidence | Pass `database-probe`, exhaust `database-validate` | Disputed route reaches the summary |
+| Recovered evidence | Exhaust `runtime-probe`, pass `runtime-fallback-check` | Fallback findings reach the summary |
+| Inconclusive strategy | Exhaust a primary probe and its fallback check | Unresolved route still reaches synthesis |
+
+Synthesis waits for all three summaries. A final challenge check leads to either
+publication approval or an evidence-gap report. Both converge on a handoff.
+No semantic evaluator verifies the investigation's conclusions.
+
+<AnnotatedSource id="investigation" filename="examples/investigation.py" source={investigationSource} annotations={[
+  { match: 'def investigate', lines: 7, title: 'Reusable investigation', body: 'One Python helper creates an independent graph route for each strategy. This is graph construction, not a runtime Python loop.' },
+  { match: 'validate = flow.repeat_check', lines: 7, title: 'Nested decisions', body: 'A successful primary probe leads to counterexample validation, which can support or dispute the hypothesis.' },
+  { match: 'fallback_collect = flow.agent', lines: 4, title: 'An alternate route', body: 'Exhausting the primary probe starts a fallback. That evidence can recover the investigation or remain unresolved.' },
+  { match: 'settled = flow.join', lines: 4, title: 'Preserve uncertainty', body: 'All four terminal routes converge on a summary. Convergence permits reporting; it does not certify the hypothesis.' },
+  { match: 'challenge = flow.repeat_check', lines: 5, title: 'Challenge the synthesis', body: 'The combined conclusion gets its own repair budget before publication approval or an evidence-gap report.' },
+]} />
+
+## Structured review result
+
+**Source:** `examples/structured_review.py`.
+
+This smaller example adds a schema to an agent's result. The viewer waits for
+manually supplied JSON, validates it, and stores it on the node. Follow the
+[structured-output tutorial](/tutorials/structured-output/) to try valid and invalid results.
+
+<AnnotatedSource id="structured" filename="examples/structured_review.py" source={reviewSource} annotations={[
+  { match: 'class Finding', lines: 7, title: 'Nested finding schema', body: 'Every finding has a severity, location, explanation, and nullable suggested fix. The schema follows the bundled Pydantic version’s required-field rules.' },
+  { match: 'class Review', lines: 6, title: 'Typed review result', body: 'The result combines an enum, text, nested findings, a number, and a boolean.' },
+  { match: 'review = flow.agent', lines: 4, title: 'Bind the result type', body: 'The output argument supplies the model class. Schema metadata is exported with the agent step.' },
+  { match: 'flow.approval', title: 'Acknowledge completion', body: 'This gate waits for valid output. This example does not inspect the verdict. Other graphs can use output references to condition later steps.' },
+]} />
+
+## Agent map, reduce, and chain
+
+**Source:** `examples/agent_pipeline.py`.
+
+Three research agents produce evidence in separate workspaces. A reducer receives
+their actual output objects. A critic and editor then run in sequence, with the
+original brief preserved as shared context. The publication's `approved` field
+selects publish or follow-up work.
+
+```sh
+./run.sh -script examples/agent_pipeline.py
+```
+
+Enter `n` twice to create workspaces and start the three research agents. Supply
+results with `o research-0 JSON`, `o research-1 JSON`, and `o research-2 JSON`.
+Each result needs `topic`, `sources`, `finding`, and `confidence` between 0 and 1.
+Advance with `n`, supply a `Brief` to `brief`, then advance and supply each chain
+result to `publication-critique` and `publication-edit`. The viewer displays the
+resolved inputs passed to each agent.
+
+<AnnotatedSource id="pipeline" filename="examples/agent_pipeline.py" source={pipelineSource} annotations={[
+  { match: 'class Evidence', lines: 8, title: 'Real Pydantic constraints', body: 'Confidence is bounded from zero to one. The exported schema carries this constraint into Go validation.' },
+  { match: 'research = Agent', lines: 8, title: 'Reusable agent definitions', body: 'Agent definitions combine instructions, skill references, and output models. Each binding gets independent state.' },
+  { match: 'topics =', lines: 3, title: 'Static map', body: 'The topic list is known while Python authors the graph. One researcher and one workspace are bound per topic.' },
+  { match: 'brief = flow.reduce_agent', lines: 2, title: 'Reduce actual objects', body: 'Go resolves each completed researcher output into inputs.results. An unfinished or failed researcher prevents reduction.' },
+  { match: 'pipeline = flow.chain', lines: 3, title: 'Chain with preserved context', body: 'Each stage receives the prior result as previous. The original brief remains available under context for both stages.' },
+  { match: 'publish = flow.agent', lines: 7, title: 'Branch on structured data', body: 'Whole objects and selected fields become inputs. A scalar equality condition uses the publication approval flag.' },
+]} />
+
+The map is static. It cannot create a variable number of workers from runtime
+output. References to omitted optional fields or unavailable array indexes fail
+when resolved. No provider calls or real workspace operations run here.
+
+## Four-service delivery pipeline
+
+**Source:** `examples/delivery_pipeline.py`.
+
+This 28-node graph combines typed outputs with parallel planning, serial
+implementation/review chains, mapped verification, and a readiness reducer.
+Each chain preserves its charter and plan in shared context.
+
+```sh
+./run.sh -script examples/delivery_pipeline.py
+./run.sh -script examples/delivery_pipeline.py < examples/delivery_pipeline.inputs.txt
+```
+
+The input tape supplies coherent successful results. Change the `assess-readiness`
+result to `ready: false` to explore escalation. Its decision comes from submitted
+agent output; the harness does not independently compute that every service passed.
+
+<AnnotatedSource id="delivery" filename="examples/delivery_pipeline.py" source={deliverySource} annotations={[
+  { match: 'class Readiness', lines: 5, title: 'A constrained decision', body: 'The readiness object carries a boolean, bounded service count, summary, and unresolved issues. Schema validation checks shape and constraints, not truth.' },
+  { match: 'for service in', lines: 12, title: 'Four independent chains', body: 'Every service gets a plan, implementation, and review. Shared context preserves the charter, service plan, and name across chain stages.' },
+  { match: 'checks = flow.map_agents', lines: 3, title: 'Map and reduce evidence', body: 'Each verifier receives its service review and plan. The reducer waits for all four validated verification objects.' },
+  { match: 'approval = flow.approval', lines: 2, title: 'Readiness selects a gate', body: 'Only ready=true reaches approval. A false result selects escalation. Reporting convergence never grants delivery permission.' },
+  { match: 'settled = flow.join', lines: 5, title: 'Audit either decision', body: 'The audit runs after the approved manifest or escalation route. It receives readiness and charter values directly.' },
+]} />
+
+## Parameterized skill references
+
+**Source:** `examples/skill_parameters.py`.
+
+Generated builders package typed arguments into skill invocation descriptors.
+These sample skills are fixtures, not installed tools. Follow the exact setup in
+[skill-generation guide](/guides/skill-types/#run-the-parameterized-example).
+
+<AnnotatedSource id="skill-parameters" filename="examples/skill_parameters.py" source={skillSource} annotations={[
+  { match: 'from generated_skills', title: 'Generated import', body: 'The explicit skills-module runner option mounts the generated module in WASI. It is not discovered from host Python packages.' },
+  { match: 'skills=[review_change', lines: 2, title: 'Inferred keyword arguments', body: 'Explicit source conventions produce typed builders. They return a skill name and quoted argument text; they do not execute the skill.' },
+  { match: 'skills=[explore_design', title: 'Free-form fallback', body: 'A skill without an inferred argument contract keeps a positional string interface instead of invented keyword parameters.' },
+]} />
+
+## Read the convergence boundaries
+
+An ordinary dependency requires completion. Any skipped input skips an ordinary
+node. A `join` instead waits for all inputs to complete or skip, with at least
+one completed input. All-skipped inputs skip the join; execution errors block it.
+
+These examples join **route endpoints**, not raw check outcomes. An exhausted
+check has status `completed` with outcome `failed`. Joining that check directly
+would not establish permission to release, migrate, or publish.
+
+See the [Python API](/reference/python-api/#join) and
+[execution model](/explanation/execution-model/#skipping-and-joins) for exact semantics.
