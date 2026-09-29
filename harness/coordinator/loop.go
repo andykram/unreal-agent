@@ -347,6 +347,9 @@ func (current *coordinator) requestModelResponse(
 	ctx context.Context,
 	results chan<- modelResponseResult,
 ) error {
+	if canRequest := current.dependencies.CanRequestModel; canRequest != nil && !canRequest() {
+		return nil
+	}
 	current.interruptModel()
 	built, err := current.dependencies.ContextBuilder.Build()
 	if err != nil {
