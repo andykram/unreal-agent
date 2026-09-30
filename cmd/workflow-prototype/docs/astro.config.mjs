@@ -30,6 +30,7 @@ export default defineConfig({
         { label: 'Workflow storage', slug: 'explanation/storage' },
       ] },
       { label: 'How-to guides', items: [
+        { label: 'Run workflows in the REPL', slug: 'guides/live-workflows' },
         { label: 'Explore complex workflows', slug: 'guides/complex-examples' },
         { label: 'Generate skill-name types', slug: 'guides/skill-types' },
         { label: 'Troubleshoot a workflow', slug: 'guides/troubleshooting' },

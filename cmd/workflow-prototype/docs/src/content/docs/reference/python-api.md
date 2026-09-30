@@ -84,7 +84,7 @@ object. `after` defaults to no dependencies. A string becomes a one-element list
 
 Go accepts only `worktree`, `agent`, `command`, `approval`, `repeat_check`, and
 `join` kinds. This method does not register new operation types. The standalone viewer simulates
-these kinds; applications supply concrete execution adapters.
+these kinds; the REPL supplies live execution adapters.
 
 ```python
 flow.step("conditional-test", "command", after="verify",
@@ -103,8 +103,8 @@ flow.worktree(id, base="current")
 
 Creates a root `worktree` description with `spec.base` and
 `spec.backend == "worktrunk"`. The backend cannot be changed through this method.
-The simulator treats `base` and the backend as metadata. A concrete executor
-must define commit resolution and worktree provisioning.
+The simulator treats `base` as metadata. Live REPL execution resolves it to a
+commit and provisions a Worktrunk worktree through the configured backend.
 
 ```python
 workspace = flow.worktree("feature", base="current")
@@ -117,9 +117,9 @@ flow.agent(id, *, workspace, prompt, after=(), when=None, skills=(), output=None
 ```
 
 Describes an agent with the given `workspace` and prompt string.
-`system_prompt_append` records additive system instructions in the graph. An
-agent executor must append them while preserving its configured base instructions
-and restrictions. The simulator does not assemble or send model prompts.
+`system_prompt_append` adds workflow-specific system instructions after the
+configured system prompt, workspace, and discovered instructions. It does not
+replace them. Plan-mode restrictions, when applicable, follow the addition.
 Reusable `Agent(..., system_prompt_append="...")` definitions preserve the same
 addition across bindings, chains, maps, and reductions. Both APIs require a string.
 
@@ -144,9 +144,10 @@ Go validates the serialized shape. See [skill tooling](/guides/skill-types/).
 `output` optionally accepts a Pydantic `BaseModel` subclass for a structured response.
 See [OutputModel](#outputmodel) below.
 
-These are references only during authoring and simulation. A future or
-application-supplied agent executor is responsible for resolving registered
-skill names and loading them. This layer does not include a live agent adapter.
+Skill references are metadata during authoring and simulation. During live REPL
+execution, the agent adapter creates a harness runtime, passes it the configured
+skill references, and submits the prompt. The runtime resolves registered skill
+names and loads their instructions.
 This method has no model, effort, access, or timeout parameters.
 
 `inputs` optionally maps names to literal values or output references. References

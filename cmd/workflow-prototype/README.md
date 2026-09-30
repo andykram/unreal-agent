@@ -108,8 +108,7 @@ without changing ordinary dependency behavior.
 The Go simulator now persists the immutable graph and execution state in SQLite,
 including results, attempts, phases, outcomes, and approvals. Resume with
 `./run.sh -resume RUN_ID` restores the last checkpoint without Python authoring.
-The shared engine provides generic executor dispatch and explicit reconciliation.
-The simulator does not supply real command, agent, or worktree adapters.
+External execution and workspace ownership reconciliation remain unimplemented.
 See the [storage contract](docs/src/content/docs/explanation/storage.md) for
 retention, automatic keys, executor isolation, and recovery guarantees.
 

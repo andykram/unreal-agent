@@ -11,4 +11,4 @@ For changes in these areas, read the matching repository skill. Load additional 
 - [Harness engineering](.agents/skills/harness-engineering/SKILL.md): coordinator, persisted sessions, tools, providers, and model requests.
 - [Workflow library](.agents/skills/workflow-library/SKILL.md): Python/WASI API, graph dataflow, structured outputs, generated skill types, and developer docs.
 - [Workflow durability](.agents/skills/workflow-durability/SKILL.md): checkpoints, recovery, retention, memoization, and executor key isolation.
-- [REPL engineering](.agents/skills/repl-engineering/SKILL.md): terminal rendering, input, sessions, approval UI, configuration, and model catalogs.
+- [REPL engineering](.agents/skills/repl-engineering/SKILL.md): terminal rendering, input, sessions, workflow threads and approval UI, configuration, and model catalogs.

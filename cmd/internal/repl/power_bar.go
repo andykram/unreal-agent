@@ -37,6 +37,20 @@ func (model *uiModel) openPowerBar() (tea.Model, tea.Cmd) {
 			bar.choices = append(bar.choices, powerChoice{commandChoice: commandChoice{Label: choice.Metadata.Name, Description: description, Value: id}, kind: "session"})
 		}
 	}
+	for _, panel := range model.workflowPanels() {
+		name := panel.graph.Name
+		if name == "" {
+			name = "Loading workflow"
+		}
+		if panel == model.workflow && panel.visible {
+			bar.selected = len(bar.choices)
+		}
+		identity := panel.runID
+		if identity == "" {
+			identity = panel.threadID
+		}
+		bar.choices = append(bar.choices, powerChoice{commandChoice: commandChoice{Label: name, Description: "Workflow thread · " + identity + " · " + workflowThreadStatus(panel), Value: workflowPanelID(panel)}, kind: "workflow"})
+	}
 	for _, command := range commandRegistry() {
 		bar.choices = append(bar.choices, powerChoice{commandChoice: commandChoice{Label: command.Name, Description: command.Description, Value: command.Name}, kind: "command"})
 	}
@@ -128,6 +142,9 @@ func (model *uiModel) updatePowerBar(key tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		model.sessionMenu = nil
 		model.showQuestion = false
 		model.completion = nil
+		if model.workflow != nil && choice.kind != "workflow" && choice.kind != "session" {
+			model.workflow.visible = false
+		}
 		switch choice.kind {
 		case "command":
 			if choice.Value == "/rename" {
@@ -147,7 +164,7 @@ func (model *uiModel) updatePowerBar(key tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				model.message = err.Error()
 			}
 			return model, nil
-		case "session":
+		case "session", "workflow":
 			return model.selectSidebarThread(choice.Value)
 		case "provider":
 			return model.openProviderPopup(choice.Value)
